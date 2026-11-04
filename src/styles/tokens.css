@@ -1,0 +1,117 @@
+/*
+  Design tokens, extracted from the Reading Desk Figma file (Desktop Reader + Desktop Question frames).
+  Every colour in the app comes from these. Dark values are defined for both the OS setting and the in-app toggle.
+*/
+:root {
+  /* Surfaces */
+  --canvas: #f5f5f7;          /* reading canvas behind the page */
+  --paper: #ffffff;           /* document sheet */
+  --surface: #faf9f6;         /* workspace screens (Question, Library) */
+  --surface-raised: #ffffff;  /* cards, popovers */
+  --sidebar: rgba(232, 232, 225, 0.91);
+  --sidebar-hover: rgba(255, 255, 255, 0.45);
+  --sidebar-active: #e1e8d9;
+  --field: rgba(255, 255, 255, 0.55);
+
+  /* Ink */
+  --ink: #1d1d1f;
+  --ink-2: #6e6e73;
+  --ink-3: #8e8e93;
+  --hairline: #dcddd5;
+  --border: #d2d2d7;
+
+  /* Accent */
+  --accent: #1f5e4c;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6f0ea;
+  --accent-line: rgba(31, 94, 76, 0.55);
+  --link: #1f55a3;
+
+  /* Annotation colours (soft, low saturation) */
+  --a-highlight: #f8f0c7;
+  --a-note: #e6f0ea;
+  --a-claude: #e8edf2;
+  --a-clipping: #f2efe8;
+  --a-source: rgba(31, 94, 76, 0.08);
+  /* Branch-kind dots (cards, map, silhouettes) */
+  --k-note: #5f9e86;
+  --k-definition: #b08a2e;
+  --k-claude: #6f86b5;
+  --k-clipping: #9a8f7d;
+
+  /* Feedback */
+  --danger: #b3402f;
+  --warning: #9a6b00;
+
+  /* Toolbar capsule */
+  --capsule: rgba(44, 44, 46, 0.86);
+  --capsule-ink: #f5f5f7;
+  --capsule-active: rgba(255, 255, 255, 0.92);
+
+  /* Type */
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", Inter, system-ui, sans-serif;
+  --font-serif: Newsreader, "New York", "Iowan Old Style", Georgia, serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --read-size: 18px;
+  --read-leading: 1.6;
+  --title-1: 34px;
+  --title-2: 26px;
+  --title-3: 20px;
+
+  /* Shape and depth */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 2px 6px rgba(0, 0, 0, 0.06), 0 18px 48px rgba(0, 0, 0, 0.14);
+  --blur: saturate(180%) blur(20px);
+
+  /* Layout */
+  --sidebar-w: 248px;
+  --margin-w: 280px;
+  --sheet-w: 680px;
+  --spine-w: 44px;
+  --topbar-h: 64px;
+
+  /* Motion */
+  --spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-fast: 160ms;
+  --t-med: 260ms;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #1c1c1e; --paper: #2c2c2e; --surface: #1c1c1e; --surface-raised: #2c2c2e;
+    --sidebar: rgba(36, 36, 38, 0.92); --sidebar-hover: rgba(255, 255, 255, 0.06); --sidebar-active: rgba(108, 193, 162, 0.16);
+    --field: rgba(255, 255, 255, 0.06);
+    --ink: #f5f5f7; --ink-2: #a1a1a6; --ink-3: #7c7c80; --hairline: #3a3a3c; --border: #48484a;
+    --accent: #6cc1a2; --accent-ink: #0e1a16; --accent-soft: rgba(108, 193, 162, 0.16); --accent-line: rgba(108, 193, 162, 0.6); --link: #8db8f0;
+    --a-highlight: rgba(240, 210, 90, 0.26); --a-note: rgba(108, 193, 162, 0.18); --a-claude: rgba(141, 184, 240, 0.16); --a-clipping: rgba(255, 255, 255, 0.07);
+    --a-source: rgba(108, 193, 162, 0.12); --k-note: #6cc1a2; --k-definition: #d9b45a; --k-claude: #9db3e0; --k-clipping: #b9ae9b;
+    --capsule: rgba(58, 58, 60, 0.9); --capsule-active: rgba(255, 255, 255, 0.9);
+    --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
+    --shadow-pop: 0 2px 6px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #1c1c1e; --paper: #2c2c2e; --surface: #1c1c1e; --surface-raised: #2c2c2e;
+  --sidebar: rgba(36, 36, 38, 0.92); --sidebar-hover: rgba(255, 255, 255, 0.06); --sidebar-active: rgba(108, 193, 162, 0.16);
+  --field: rgba(255, 255, 255, 0.06);
+  --ink: #f5f5f7; --ink-2: #a1a1a6; --ink-3: #7c7c80; --hairline: #3a3a3c; --border: #48484a;
+  --accent: #6cc1a2; --accent-ink: #0e1a16; --accent-soft: rgba(108, 193, 162, 0.16); --accent-line: rgba(108, 193, 162, 0.6); --link: #8db8f0;
+  --a-highlight: rgba(240, 210, 90, 0.26); --a-note: rgba(108, 193, 162, 0.18); --a-claude: rgba(141, 184, 240, 0.16); --a-clipping: rgba(255, 255, 255, 0.07);
+  --a-source: rgba(108, 193, 162, 0.12); --k-note: #6cc1a2; --k-definition: #d9b45a; --k-claude: #9db3e0; --k-clipping: #b9ae9b;
+  --capsule: rgba(58, 58, 60, 0.9); --capsule-active: rgba(255, 255, 255, 0.9);
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 2px 6px rgba(0, 0, 0, 0.3), 0 18px 48px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
