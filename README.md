@@ -4,6 +4,8 @@ A place for rabbit holes. Start a tree from one seed (a PDF, an EPUB, an article
 
 Claude only joins in when you ask.
 
+> **Work in progress.** Reading Desk is being built in the open and changes often. Suggestions, ideas and bug reports are very welcome: [open an issue](https://github.com/hamzarajnalvee/reading-desk/issues) or start a discussion.
+
 ## Run it
 
 You need Node.js 20 or newer.
