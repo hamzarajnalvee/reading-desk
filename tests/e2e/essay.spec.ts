@@ -17,6 +17,11 @@ test.describe("Essay workspace", () => {
     const branch = card(page, "n-telos").locator('[data-testid="branch-card"][data-kind="source"]');
     await expect(branch).toContainText("Not linked");
     await expect(branch.getByTestId("article")).toContainText("Painting a wall");
+    // It stands in its own column beyond the margin, clear of the page and as tall as the window.
+    const sheetBox = (await card(page, "n-telos").locator(".sheet").first().boundingBox())!;
+    const colBox = (await branch.boundingBox())!;
+    expect(colBox.x + colBox.width < sheetBox.x || colBox.x > sheetBox.x + sheetBox.width).toBe(true);
+    expect(colBox.height).toBeGreaterThan(400);
     // It sits beside the seed on screen, and stays there while you write on the seed.
     const onScreen = async () => { const b = await branch.boundingBox(); return !!b && b.y > 0 && b.y < 900; };
     await expect.poll(onScreen).toBe(true);
@@ -132,5 +137,23 @@ test.describe("Essay workspace", () => {
     await page.goto("/tree/tr-telos?view=notebook");
     await page.getByRole("button", { name: "Sort with Claude" }).click();
     await expect(page.getByTestId("sort-suggestions")).toBeVisible();
+  });
+
+  test("Search finds papers without leaving the app, and Add puts one on the seed", async ({ page }) => {
+    // Tests run offline: answer the search the way the server would.
+    await page.route("**/api/search?*", (route) => route.fulfill({ json: { hits: [
+      { title: "Deskilling dilemma: brain over automation", url: "https://example.org/deskilling.pdf", snippet: "Deskilling refers to the reduction of the skill level required.", meta: "El Tarhouny · 2026 · Frontiers in Medicine", free: true },
+    ] } }));
+    await openTree(page, "tr-telos");
+    await page.getByTestId("add-to-tree").click();
+    const dialog = page.getByRole("dialog", { name: "Add to this tree" });
+    await expect(dialog.getByRole("tab", { name: "Search" })).toHaveAttribute("aria-selected", "true");
+    await dialog.getByRole("searchbox", { name: "Search for" }).fill("deskilling automation");
+    await dialog.getByRole("button", { name: "Search", exact: true }).click();
+    const hit = dialog.getByTestId("search-hit");
+    await expect(hit).toContainText("Deskilling dilemma");
+    await hit.getByRole("button", { name: /^Add / }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(card(page, "n-telos").locator('[data-testid="branch-card"][data-kind="source"]')).toContainText("Deskilling dilemma");
   });
 });

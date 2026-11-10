@@ -466,3 +466,18 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .excerpt-bar { position: absolute; z-index: 6; transform: translateX(-50%); background: var(--capsule); color: var(--capsule-ink); border-radius: var(--r-pill); padding: 3px; box-shadow: var(--shadow-pop); white-space: nowrap; }
 .excerpt-bar button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: var(--text-sm); color: inherit; background: none; border: 0; padding: 5px 12px; border-radius: var(--r-pill); cursor: pointer; }
 .excerpt-bar button:hover { background: var(--capsule-active); }
+
+/* The source you're reading stands in its own column beyond the margin, as tall as the window; the page moves over for it. */
+.canvas.col-left { padding-left: calc(28px + var(--read-col, 520px) + 24px); }
+.canvas.col-right { padding-right: calc(28px + var(--read-col, 520px) + 24px); }
+.bcard.reading-col { width: var(--read-col, 520px) !important; display: flex; flex-direction: column; overflow: hidden; transition: top var(--t-fast) ease-out, box-shadow var(--t-fast); }
+.bcard.reading-col.side-right { left: calc(100% + 24px); right: auto; }
+.bcard.reading-col.side-left { right: calc(100% + 24px); left: auto; }
+.bcard.reading-col .bcard-article { flex: 1; max-height: none; min-height: 0; }
+.bcard.reading-col .bcard-resize { display: none; }
+@media (prefers-reduced-motion: reduce) { .bcard.reading-col { transition: none; } }
+/* With a reading column open the page never shrinks below a readable width; past that, scroll sideways (or zoom out). */
+.canvas.col-left, .canvas.col-right { grid-template-columns: minmax(min(480px, var(--sheet-w)), var(--sheet-w)); }
+.canvas.with-margin.col-left, .canvas.with-margin.col-right { grid-template-columns: var(--margin-user, 230px) minmax(min(480px, var(--sheet-w)), var(--sheet-w)) var(--margin-user, 230px); }
+.zoom-box:has(.canvas.col-left), .zoom-box:has(.canvas.col-right) { min-width: calc(480px + var(--read-col, 520px) + 24px + 56px); }
+.zoom-box:has(.canvas.with-margin.col-left), .zoom-box:has(.canvas.with-margin.col-right) { min-width: calc(480px + 2 * var(--margin-user, 230px) + 64px + var(--read-col, 520px) + 24px + 56px); }

@@ -1,14 +1,15 @@
 // Start a tree, branch from a passage, or add straight to a card with no passage (e.g. a paper onto the essay's seed):
 // write an idea, open a web address, add a file, paste text, or look a word up.
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, FileUp, Globe, PenLine, ClipboardPaste, X } from "lucide-react";
+import { BookOpen, ExternalLink, FileUp, Globe, PenLine, ClipboardPaste, Plus, Search, X } from "lucide-react";
 import type { Anchor } from "../../data/types";
 import { useStore } from "../../store/useStore";
 import { ingestFile, ingestText, IngestError } from "../../lib/ingest";
-import { fetchAsDoc } from "../../lib/api";
+import { fetchAsDoc, search, type SearchHit } from "../../lib/api";
+import { Segmented } from "../ui";
 import { addDefinition, branchFromUrl, noteTitle } from "../../lib/actions";
 
-type Tab = "write" | "url" | "file" | "paste" | "lookup";
+type Tab = "write" | "url" | "file" | "paste" | "lookup" | "search";
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
   { id: "write", label: "Write", icon: <PenLine size={14} /> },
   { id: "url", label: "Web address", icon: <Globe size={14} /> },
@@ -16,6 +17,7 @@ const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
   { id: "paste", label: "Paste text", icon: <ClipboardPaste size={14} /> },
 ];
 const LOOKUP = { id: "lookup" as Tab, label: "Look up", icon: <BookOpen size={14} /> };
+const SEARCH = { id: "search" as Tab, label: "Search", icon: <Search size={14} /> };
 /** Where branches added without a passage sit in the margin, before you thread them to one. */
 const LOOSE_Y = 120;
 
@@ -25,7 +27,7 @@ type Props =
 
 export function AddDialog(p: Props) {
   const { createTree, addBranch } = useStore.getState();
-  const [tab, setTab] = useState<Tab>(p.mode === "tree" ? "write" : "url");
+  const [tab, setTab] = useState<Tab>(p.mode === "tree" ? "write" : "search");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
@@ -33,7 +35,9 @@ export function AddDialog(p: Props) {
   const loose = p.mode === "branch" && !p.anchor;
   const anchors = p.mode === "branch" && p.anchor ? [p.anchor] : [];
   const where = loose ? { marginY: LOOSE_Y } : {};
-  const tabs = loose ? [...TABS, LOOKUP] : TABS;
+  const tabs = p.mode === "branch" ? [SEARCH, ...TABS, ...(loose ? [LOOKUP] : [])] : TABS;
+  const [where2, setWhere2] = useState<"papers" | "wikipedia">("papers");
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -55,7 +59,21 @@ export function AddDialog(p: Props) {
     try { await fn(); } catch (e) { setError(e instanceof IngestError ? e.message : (e as Error).message || "Something went wrong."); setBusy(null); }
   };
 
+  /** Add a search result: it opens like any web address (PDFs in full, articles as clean text). */
+  const addHit = (h: SearchHit) => {
+    if (p.mode !== "branch") return;
+    const id = branchFromUrl(p.treeId, p.parentId, p.anchor, h.url, h.title);
+    if (loose) useStore.getState().updateNode(id, where);
+    p.onCreated(id);
+  };
   const submit = () => run(async () => {
+    if (tab === "search") {
+      if (!text.trim()) { setError("Type what you're looking for."); return; }
+      setBusy(where2 === "papers" ? "Searching research papers…" : "Searching Wikipedia…"); setHits(null);
+      setHits(await search(text.trim(), where2));
+      setBusy(null);
+      return;
+    }
     if (tab === "write") {
       if (!text.trim()) { setError("Write something first."); return; }
       if (p.mode === "tree") p.onCreated(createTree({ kind: "note", title: title.trim() || noteTitle(text), body: text.trim() }));
@@ -121,6 +139,31 @@ export function AddDialog(p: Props) {
               <input ref={fileRef} type="file" hidden accept=".pdf,.epub,.docx,.html,.htm,.md,.markdown,.txt,text/*,application/pdf" onChange={(e) => onFiles(e.target.files)} />
             </label>
           )}
+          {tab === "search" && (<>
+            <div className="search-row">
+              <input ref={firstRef} className="field" type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder={where2 === "papers" ? "e.g. deskilling automation manual skills" : "e.g. Deskilling"} aria-label="Search for" />
+              <Segmented size="sm" label="Search in" value={where2} onChange={(v) => { setWhere2(v); setHits(null); }} options={[{ value: "papers", label: "Papers" }, { value: "wikipedia", label: "Wikipedia" }]} />
+            </div>
+            {hits && hits.length === 0 && <p className="muted small">Nothing found. Try fewer or different words.</p>}
+            {hits && hits.length > 0 && (
+              <ul className="search-hits" aria-label="Search results">
+                {hits.map((h) => (
+                  <li key={h.url} className="search-hit" data-testid="search-hit">
+                    <div className="sh-main">
+                      <div className="serif sh-title">{h.title}</div>
+                      {h.meta && <div className="muted small">{h.meta}{!h.free && " · may need a login"}</div>}
+                      {h.snippet && <p className="small sh-snippet">{h.snippet}</p>}
+                    </div>
+                    <div className="sh-actions">
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => addHit(h)} aria-label={`Add ${h.title}`}><Plus size={13} />Add</button>
+                      <a className="icon-btn" href={h.url} target="_blank" rel="noopener" aria-label="Open the original" title="Open the original"><ExternalLink size={14} /></a>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!hits && !busy && <p className="muted small">{where2 === "papers" ? "Research papers from OpenAlex. Ones with a free copy open in full here." : "Wikipedia articles, opened as clean text."}</p>}
+          </>)}
           {tab === "lookup" && (<>
             <input ref={firstRef} className="field" value={text} onChange={(e) => setText(e.target.value)} placeholder="A word, a name or an idea, e.g. deskilling" aria-label="Term to look up" />
             <label className="check small"><input type="checkbox" checked={wiki} onChange={(e) => setWiki(e.target.checked)} /> Wikipedia only (skip the dictionary)</label>
@@ -134,7 +177,7 @@ export function AddDialog(p: Props) {
           {tab !== "file" && (
             <div className="dialog-actions">
               <button type="button" className="btn btn-ghost" onClick={p.onClose}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={!!busy}>{p.mode === "tree" ? "Start tree" : tab === "url" ? "Open as branch" : tab === "lookup" ? "Look up" : "Add branch"}</button>
+              <button type="submit" className="btn btn-primary" disabled={!!busy}>{p.mode === "tree" ? "Start tree" : tab === "url" ? "Open as branch" : tab === "lookup" ? "Look up" : tab === "search" ? "Search" : "Add branch"}</button>
             </div>
           )}
         </form>

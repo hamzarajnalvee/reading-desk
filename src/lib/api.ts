@@ -42,6 +42,17 @@ export async function suggestTracks(statement: string, items: { id: string; kind
   return j?.tracks || {};
 }
 
+export type SearchHit = { title: string; url: string; snippet?: string; meta?: string; free?: boolean };
+/** Search Wikipedia or research papers (OpenAlex) through the app's server. */
+export async function search(q: string, source: "wikipedia" | "papers"): Promise<SearchHit[]> {
+  let r: Response;
+  try { r = await fetch(`/api/search?source=${source}&q=${encodeURIComponent(q)}`); }
+  catch { throw new Error("Couldn't reach the app's server. Is npm run dev running?"); }
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(j?.error || `Search failed (${r.status})`);
+  return j?.hits || [];
+}
+
 /** Dictionary definition (Wiktionary / Wikipedia). Null when nothing was found. */
 export async function defineTerm(term: string, source?: "wikipedia"): Promise<{ term: string; text: string; source: Source } | null> {
   try {

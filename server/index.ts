@@ -104,6 +104,47 @@ app.get("/api/define", async (req, res) => {
   } catch (e) { res.status(502).json({ error: (e as Error).message }); }
 });
 
+type Hit = { title: string; url: string; snippet?: string; meta?: string; free?: boolean };
+const strip = (s: string) => s.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&#0?39;/g, "'").replace(/\s+/g, " ").trim();
+/** OpenAlex keeps abstracts as word → positions; put the words back in order. */
+const abstractOf = (inv?: Record<string, number[]> | null) => {
+  if (!inv) return "";
+  const words: string[] = [];
+  for (const [w, ps] of Object.entries(inv)) for (const p of ps) words[p] = w;
+  return words.filter(Boolean).join(" ");
+};
+
+/** Search without leaving the app (no AI, no key). `source=wikipedia` searches Wikipedia; `source=papers` searches OpenAlex for research papers. */
+app.get("/api/search", async (req, res) => {
+  const q = String(req.query.q || "").trim().slice(0, 200);
+  const source = req.query.source === "papers" ? "papers" : "wikipedia";
+  if (!q) { res.status(400).json({ error: "Type something to search for." }); return; }
+  if (OFFLINE) { res.status(503).json({ error: "Offline" }); return; }
+  const headers = { "User-Agent": UA, Accept: "application/json" };
+  try {
+    let hits: Hit[] = [];
+    if (source === "wikipedia") {
+      const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=12&srsearch=${encodeURIComponent(q)}`, { headers, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error(`Wikipedia answered ${r.status}`);
+      const j = (await r.json()) as { query?: { search?: { title: string; snippet: string; wordcount?: number }[] } };
+      hits = (j.query?.search || []).map((s) => ({ title: s.title, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(s.title.replace(/ /g, "_"))}`, snippet: strip(s.snippet), meta: s.wordcount ? `Wikipedia · ${s.wordcount.toLocaleString()} words` : "Wikipedia", free: true }));
+    } else {
+      const r = await fetch(`https://api.openalex.org/works?per-page=12&search=${encodeURIComponent(q)}`, { headers, signal: AbortSignal.timeout(10000) });
+      if (!r.ok) throw new Error(`OpenAlex answered ${r.status}`);
+      type Work = { display_name?: string; publication_year?: number; doi?: string; cited_by_count?: number; authorships?: { author?: { display_name?: string } }[];
+        open_access?: { oa_url?: string | null }; best_oa_location?: { pdf_url?: string | null; landing_page_url?: string | null } | null; primary_location?: { landing_page_url?: string | null; source?: { display_name?: string } | null } | null; abstract_inverted_index?: Record<string, number[]> | null };
+      const j = (await r.json()) as { results?: Work[] };
+      hits = (j.results || []).filter((w) => w.display_name).map((w) => {
+        const free = w.best_oa_location?.pdf_url || w.open_access?.oa_url || w.best_oa_location?.landing_page_url || null;
+        const authors = (w.authorships || []).map((a) => a.author?.display_name).filter(Boolean) as string[];
+        const meta = [authors.slice(0, 3).join(", ") + (authors.length > 3 ? " et al." : ""), w.publication_year, w.primary_location?.source?.display_name, w.cited_by_count ? `cited ${w.cited_by_count.toLocaleString()}×` : ""].filter(Boolean).join(" · ");
+        return { title: strip(w.display_name!), url: free || w.doi || w.primary_location?.landing_page_url || "", snippet: abstractOf(w.abstract_inverted_index).slice(0, 320), meta, free: !!free };
+      }).filter((h) => h.url);
+    }
+    res.json({ hits });
+  } catch (e) { res.status(502).json({ error: `Search didn't work: ${(e as Error).message}. Try again in a moment.` }); }
+});
+
 /**
  * Fetch a web page or file so it can open as a card.
  * Web pages come back as readable HTML (Readability); PDFs, EPUBs and other files come back as bytes for the browser to read.

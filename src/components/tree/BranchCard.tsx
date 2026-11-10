@@ -36,6 +36,8 @@ interface Props {
   onReadBeside?: () => void;
   /** The article is open in this card. */
   reading?: boolean;
+  /** Set when the card stands in its own reading column beyond the margin: its height, to fill the window. */
+  column?: number;
   onHover: (on: boolean) => void;
   onEdit: () => void;
   onDone: () => void;
@@ -45,7 +47,7 @@ interface Props {
   onResize: () => void;
 }
 
-export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onReadBeside, reading, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
+export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onReadBeside, reading, column, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
   const { updateNode, removeNode } = useStore.getState();
   const doc = useStore((s) => (n.docId ? s.docs[n.docId] : undefined));
   // A source shows its article when you open it here, or when you've stretched its card to read in.
@@ -149,8 +151,8 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       data-testid="branch-card"
       data-kind={n.kind}
       data-side={inline ? undefined : side}
-      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${editable ? " editable" : ""}`}
-      style={!inline ? { ...(top != null ? { top } : {}), ...(size ? { width: size.w, height: size.h } : {}) } : undefined}
+      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${column ? " reading-col" : ""}${editable ? " editable" : ""}`}
+      style={!inline ? { ...(top != null ? { top } : {}), ...(column ? { height: column } : size ? { width: size.w, height: size.h } : {}) } : undefined}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       onClick={onClick}
