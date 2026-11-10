@@ -38,7 +38,7 @@ test.describe("Essay workspace", () => {
     });
     await branch.getByTestId("article").dispatchEvent("mouseup");
     await branch.getByTestId("excerpt-cite").click();
-    await expect(page.getByRole("textbox", { name: "Your writing" })).toHaveValue(/> Painting a wall\n> — \[The case for the trivial\]\(#cite:/);
+    await expect(page.getByRole("textbox", { name: "Your writing" })).toHaveValue(/> Painting a wall\n> — \*from \[The case for the trivial\]\(#cite:[^)]+\), p\. 1\*/);
     await page.getByTestId("cite").first().click();
     await expect(page.getByTestId("card")).toHaveCount(2);
     // The article folds away from its own button.
@@ -48,6 +48,10 @@ test.describe("Essay workspace", () => {
     await branch.getByRole("button", { name: "Close article" }).focus();
     await page.keyboard.press("Enter");
     await expect(branch.getByTestId("article")).toHaveCount(0);
+    // The grabbed words stay marked in the source, filed with the essay.
+    await page.getByRole("radio", { name: "Notebook" }).click();
+    const essay = page.getByTestId("notebook").locator(".nb-group.t-essay");
+    await expect(essay.locator('[data-testid="notebook-entry"][data-kind="highlight"]')).toContainText("Painting a wall");
   });
 
   test("Read view zooms out to show more of the page, and remembers it", async ({ page }) => {
@@ -155,5 +159,43 @@ test.describe("Essay workspace", () => {
     await hit.getByRole("button", { name: /^Add / }).click();
     await expect(dialog).toHaveCount(0);
     await expect(card(page, "n-telos").locator('[data-testid="branch-card"][data-kind="source"]')).toContainText("Deskilling dilemma");
+  });
+
+  test("margin cards can be dragged further from the page and along it, and the page can be moved and resized", async ({ page }) => {
+    await openTree(page, "tr-telos");
+    await showBranches(page);
+    const c = card(page, "n-telos");
+    const def = c.locator('[data-branch="n-telos-def"]');
+    // Let the margin finish laying out before measuring.
+    let last = "";
+    await expect.poll(async () => { const b = JSON.stringify(await def.boundingBox()); const settled = b === last; last = b; return settled; }, { intervals: [150] }).toBe(true);
+    const before = (await def.boundingBox())!;
+    const head = (await def.locator(".bcard-head").boundingBox())!;
+    await page.mouse.move(head.x + 20, head.y + head.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(head.x + 80, head.y + head.height / 2 + 60, { steps: 6 });
+    await page.mouse.up();
+    // It stays where it was dropped (it doesn't open), further out and lower down.
+    await expect(page.getByTestId("card")).toHaveCount(1);
+    await expect.poll(async () => (await def.boundingBox())!.x).toBeGreaterThan(before.x + 40);
+    await expect.poll(async () => (await def.boundingBox())!.y).toBeGreaterThan(before.y + 30);
+
+    const sheet = c.locator(".sheet-wrap");
+    const w0 = (await sheet.boundingBox())!.width;
+    await sheet.hover();
+    const edge = (await c.getByTestId("page-edge").boundingBox())!;
+    await page.mouse.move(edge.x + 4, edge.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(edge.x - 120, edge.y + 40, { steps: 6 });
+    await page.mouse.up();
+    await expect.poll(async () => (await sheet.boundingBox())!.width).toBeLessThan(w0 - 80);
+    const x0 = (await sheet.boundingBox())!.x;
+    await sheet.hover();
+    const grip = (await c.getByTestId("page-grip").boundingBox())!;
+    await page.mouse.move(grip.x + 10, grip.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(grip.x - 90, grip.y + 8, { steps: 6 });
+    await page.mouse.up();
+    await expect.poll(async () => (await sheet.boundingBox())!.x).toBeLessThan(x0 - 60);
   });
 });

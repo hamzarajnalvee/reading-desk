@@ -15,8 +15,8 @@ describe("passage links in writing", () => {
     expect(parseCite("https://x.org")).toBeNull();
   });
   it("adds an excerpt as a quotation linked to its source", () => {
-    const text = appendExcerpt("Draft.", a, "The [Dark] Side");
-    expect(text).toBe("Draft.\n\n> Hands [know] things\n> — [The Dark Side](#cite:n1/b-2)\n\n");
+    const text = appendExcerpt("Draft.", a, { title: "The [Dark] Side", site: "Little Almanack" });
+    expect(text).toBe("Draft.\n\n> Hands [know] things\n> — *from [The Dark Side](#cite:n1/b-2), Little Almanack, p. 3*\n\n");
     expect(citesIn(text)).toEqual([{ label: "The Dark Side", nodeId: "n1", blockId: "b-2" }]);
   });
 });

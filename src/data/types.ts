@@ -97,6 +97,8 @@ export interface TreeNode {
   url?: string;
   /** Which margin the branch sits in, beside the page. Unset means the right. */
   side?: "left" | "right";
+  /** Where you dragged the card: `away` px further from the page (sideways), `dy` px up or down from its passage. */
+  nudge?: { away: number; dy: number };
   /** A size you gave the branch's card by dragging its corner. */
   size?: { w: number; h: number };
   /** Explanations: a question you asked Claude about the passage (empty while you're still typing it). */

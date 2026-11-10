@@ -41,13 +41,15 @@ export const citeClick = (onOpenPassage: (nodeId: string, blockId: string) => vo
 };
 
 /**
- * Add an excerpt to the end of the writing: the words as a quotation, then a link to exactly where they came from.
+ * Add an excerpt to the end of the writing: the words as a quotation, then, in italics, exactly where they came from,
+ * linked so a click opens the source at that passage.
  *   > Painting a wall teaches patience.
- *   > — [The Dark Side of Optimization](#cite:nodeId/blockId)
+ *   > — *from [The Dark Side of Optimization](#cite:nodeId/blockId), Little Almanack, p. 2*
  */
-export function appendExcerpt(text: string, a: Anchor, sourceTitle: string): string {
+export function appendExcerpt(text: string, a: Anchor, from: { title: string; site?: string }): string {
   const t = (text || "").replace(/\s+$/, "");
   const quote = a.quote.replace(/\s+/g, " ").trim();
-  const title = sourceTitle.replace(/[[\]]/g, "").trim() || "Source";
-  return (t ? t + "\n\n" : "") + `> ${quote}\n> — [${title}](#cite:${a.docId}/${a.blockId})\n\n`;
+  const title = from.title.replace(/[[\]*_]/g, "").trim() || "Source";
+  const where = [from.site?.replace(/[*_]/g, ""), a.page > 0 ? `p. ${a.page}` : ""].filter(Boolean).join(", ");
+  return (t ? t + "\n\n" : "") + `> ${quote}\n> — *from [${title}](#cite:${a.docId}/${a.blockId})${where ? `, ${where}` : ""}*\n\n`;
 }

@@ -481,3 +481,22 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .canvas.with-margin.col-left, .canvas.with-margin.col-right { grid-template-columns: var(--margin-user, 230px) minmax(min(480px, var(--sheet-w)), var(--sheet-w)) var(--margin-user, 230px); }
 .zoom-box:has(.canvas.col-left), .zoom-box:has(.canvas.col-right) { min-width: calc(480px + var(--read-col, 520px) + 24px + 56px); }
 .zoom-box:has(.canvas.with-margin.col-left), .zoom-box:has(.canvas.with-margin.col-right) { min-width: calc(480px + 2 * var(--margin-user, 230px) + 64px + var(--read-col, 520px) + 24px + 56px); }
+
+/* Moving and sizing margin cards: drag the top strip to move, the outer corner to resize. */
+.bcard-head.movable { cursor: grab; touch-action: none; }
+.bcard.moving { transition: none; z-index: 8; box-shadow: var(--shadow-pop); }
+.bcard.moving .bcard-head { cursor: grabbing; }
+.bcard-resize { width: 18px; height: 18px; }
+.bcard:hover .bcard-resize, .bcard.focused .bcard-resize { opacity: 0.8; }
+.bcard-resize:hover { opacity: 1 !important; }
+
+/* The page itself: a grip on top slides it sideways, its right edge resizes it. Both stay hidden until you hover the page. */
+.sheet-wrap { position: relative; }
+.sheet-wrap.page-moving, .sheet-wrap.page-moving * { user-select: none; }
+.page-grip { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; justify-content: center; width: 44px; height: 18px; padding: 0; border: 1px solid var(--hairline); border-radius: var(--r-pill); background: var(--surface-raised); color: var(--ink-3); cursor: grab; opacity: 0; transition: opacity var(--t-fast); touch-action: none; }
+.page-edge { position: absolute; top: 24px; bottom: 24px; right: -9px; z-index: 3; width: 10px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; cursor: ew-resize; opacity: 0; transition: opacity var(--t-fast), background var(--t-fast); touch-action: none; }
+.page-edge::after { content: ""; position: absolute; top: 50%; left: 4px; width: 2px; height: 48px; transform: translateY(-50%); border-radius: 2px; background: var(--accent-line); }
+.sheet-wrap:hover > .page-grip, .sheet-wrap:hover > .page-edge, .page-grip:focus-visible, .page-edge:focus-visible, .page-moving > .page-grip, .page-moving > .page-edge { opacity: 1; }
+.page-edge:hover { background: var(--accent-soft); }
+.page-moving > .page-grip { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .page-grip, .page-edge { transition: none; } }

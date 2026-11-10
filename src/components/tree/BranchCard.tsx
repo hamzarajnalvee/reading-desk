@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent } from "react";
 import { ArrowLeftRight, ArrowRight, BookOpen, ExternalLink, PenLine, MessageCircle, Pencil, RotateCw, Sparkles, Trash2 } from "lucide-react";
 import type { Anchor, Depth, Track, TreeNode } from "../../data/types";
-import { TRACK_LABEL, otherTrack } from "../../lib/tracks";
+import { TRACK_LABEL, otherTrack, trackOf } from "../../lib/tracks";
 import { selectionAnchor } from "../../lib/anchors";
 import { appendExcerpt } from "../../lib/writing";
 import { toast } from "../../lib/toast";
@@ -66,10 +66,14 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
   const citeExcerpt = () => {
     if (!excerpt || !doc) return;
     const t = useStore.getState().trees.find((x) => x.id === n.treeId);
-    useStore.getState().updateTree(n.treeId, { understanding: appendExcerpt(t?.understanding || "", excerpt.anchor, doc.title) });
-    useStore.getState().setUI({ drawer: "understanding", focus: false });
+    const st = useStore.getState();
+    st.updateTree(n.treeId, { understanding: appendExcerpt(t?.understanding || "", excerpt.anchor, { title: doc.title, site: doc.site }) });
+    // Keep the words marked in the source, and file the source with the essay: you're quoting it.
+    st.addHighlight(n.id, excerpt.anchor);
+    if (trackOf(n, st.nodes) !== "essay") updateNode(n.id, { track: "essay" });
+    st.setUI({ drawer: "understanding", focus: false });
     window.getSelection()?.removeAllRanges(); setExcerpt(null);
-    toast("Excerpt added to your writing, linked to the source");
+    toast("Added to your writing and filed under Essay");
   };
   const elRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -90,12 +94,38 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
     let next = { w: w0, h: h0 };
     const move = (ev: PointerEvent) => {
       const dx = ((ev.clientX - x0) / z) * (side === "left" ? -1 : 1);
-      next = { w: Math.round(clamp(w0 + dx, 180, 560)), h: Math.round(clamp(h0 + (ev.clientY - y0) / z, 72, 900)) };
+      next = { w: Math.round(clamp(w0 + dx, 160, 900)), h: Math.round(clamp(h0 + (ev.clientY - y0) / z, 64, 1400)) };
       setLiveSize(next);
     };
     const up = () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
       updateNode(n.id, { size: next }); setLiveSize(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  /** Drag the card by its top strip: sideways moves it further from (or back towards) the page, up and down moves it along the margin. */
+  const [liveNudge, setLiveNudge] = useState<{ away: number; dy: number } | null>(null);
+  const nudge = liveNudge || n.nudge;
+  const moved = useRef(false);
+  const startMove = (e: RPointerEvent) => {
+    if (inline || locked || column || e.button !== 0 || (e.target as HTMLElement).closest("button, a, input")) return;
+    const x0 = e.clientX, y0 = e.clientY, start = n.nudge || { away: 0, dy: 0 };
+    const z = useStore.getState().ui.readZoom ?? 1;
+    let next = start;
+    moved.current = false;
+    const move = (ev: PointerEvent) => {
+      const dx = (ev.clientX - x0) / z, dy = (ev.clientY - y0) / z;
+      if (!moved.current && Math.hypot(dx, dy) < 4) return;
+      moved.current = true;
+      ev.preventDefault();
+      next = { away: Math.round(clamp(start.away + dx * (side === "left" ? -1 : 1), -40, 900)), dy: Math.round(clamp(start.dy + dy, -2000, 4000)) };
+      setLiveNudge(next);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      if (moved.current) { updateNode(n.id, { nudge: next.away || next.dy ? next : undefined }); setLiveNudge(null); onResize(); }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -135,6 +165,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
   // Buttons, links and inputs keep their own behaviour.
   const onClick = (e: MouseEvent) => {
     const t = e.target as HTMLElement;
+    if (moved.current) { moved.current = false; return; } // that was a drag, not a click
     if (editing || t.closest("button, a, input, textarea, form, [role=radiogroup], .bcard-article")) return;
     if (editable && n.body && t.closest(".bcard-note, .bcard-body") && !window.getSelection()?.toString()) { onEdit(); return; }
     onOpen();
@@ -151,14 +182,16 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       data-testid="branch-card"
       data-kind={n.kind}
       data-side={inline ? undefined : side}
-      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${column ? " reading-col" : ""}${editable ? " editable" : ""}`}
-      style={!inline ? { ...(top != null ? { top } : {}), ...(column ? { height: column } : size ? { width: size.w, height: size.h } : {}) } : undefined}
+      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${column ? " reading-col" : ""}${editable ? " editable" : ""}${liveNudge ? " moving" : ""}`}
+      style={!inline ? { ...(top != null ? { top } : {}), ...(column ? { height: column } : size ? { width: size.w, height: size.h } : {}),
+        // While dragging, the card follows the pointer; once dropped, the layout places it (its `dy` is part of where it sits).
+        ...(!column && (nudge?.away || liveNudge) ? { transform: `translate(${(side === "left" ? -1 : 1) * (nudge?.away || 0)}px, ${liveNudge ? liveNudge.dy - (n.nudge?.dy || 0) : 0}px)` } : {}) } : undefined}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       onClick={onClick}
     >
       {!inline && !locked && <button className={`thread-handle card-handle${unattached ? " show" : ""}`} aria-label="Drag onto a sentence to link this branch there too" onPointerDown={onThreadStart} />}
-      <div className="bcard-head mono-label">
+      <div className={`bcard-head mono-label${!inline && !locked && !column ? " movable" : ""}`} onPointerDown={startMove} title={!inline && !locked && !column ? "Drag to move this card" : undefined}>
         <span className="kdot" />
         <span>{n.summary ? "Summary" : n.kind === "explanation" ? (n.question !== undefined ? "Claude · Ask" : `Claude · ${n.depth || "educational"}`) : n.kind === "definition" && n.defSource?.site === "Wikipedia" ? "Wikipedia" : KIND_LABEL[n.kind]}</span>
         {first && <><span>·</span><span>p. {first.page}</span></>}

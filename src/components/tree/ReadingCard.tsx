@@ -1,6 +1,6 @@
 // One card in the stack: a reading surface with its own margin of branches, joined to their passages by threads.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent as RKeyboardEvent, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, GitBranch, ListTree, Lock, NotebookPen, RotateCw, X } from "lucide-react";
+import { AlertTriangle, GripHorizontal, ChevronLeft, ChevronRight, ExternalLink, GitBranch, ListTree, Lock, NotebookPen, RotateCw, X } from "lucide-react";
 import type { Anchor, Content, Tree, TreeNode } from "../../data/types";
 import { useStore } from "../../store/useStore";
 import { DocumentSheet, type MarkSpec } from "../reader/DocumentSheet";
@@ -110,6 +110,29 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const marginW = dragMarginW ?? savedMarginW;
   /** Read view zoom. The page and its margins are scaled as one (CSS zoom), so on-screen distances are divided by it to get page units. */
   const zoom = useStore((s) => (compact ? 1 : s.ui.readZoom ?? 1));
+  const sheetWidth = useStore((s) => (compact ? undefined : s.ui.sheetWidth));
+  const sheetShift = useStore((s) => (compact ? 0 : s.ui.sheetShift ?? 0));
+  const [livePage, setLivePage] = useState<{ w?: number; x: number } | null>(null);
+  const pageW = livePage?.w ?? sheetWidth, pageX = livePage?.x ?? sheetShift;
+  /** Drag the page's grip to slide it sideways, or its edge to make it wider or narrower. Double-click either to reset. */
+  const startPageDrag = (mode: "move" | "size") => (e: RPointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const x0 = e.clientX, z = zRef.current;
+    const w0 = sheetRef.current?.offsetWidth || 680, s0 = sheetShift;
+    let next = { w: sheetWidth, x: s0 };
+    const move = (ev: PointerEvent) => {
+      const dx = (ev.clientX - x0) / z;
+      // Widening from the right edge keeps the left edge still: the page grows by dx and shifts by half of it.
+      next = mode === "move" ? { w: sheetWidth, x: Math.round(clamp(s0 + dx, -700, 700)) } : { w: Math.round(clamp(w0 + dx, 360, 1200)), x: Math.round(clamp(s0 + dx / 2, -700, 700)) };
+      setLivePage(next);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      setUI({ sheetWidth: next.w, sheetShift: next.x }); setLivePage(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const zRef = useRef(zoom);
   zRef.current = zoom;
 
@@ -139,6 +162,8 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
         ys.push((r.top - cr.top + Math.min(r.height, 26) / 2) / z);
       }
       if (y == null && c.marginY != null) y = c.marginY;
+      // A card you dragged up or down sits that far from its passage.
+      if (y != null && c.nudge?.dy && c.id !== readingBeside) y += c.nudge.dy;
       // While you type on the page its links aren't drawn, so linked cards keep the place they had.
       if (y == null && writing && layoutRef.current.tops[c.id] != null) y = layoutRef.current.tops[c.id] + 6;
       return { c, y, ys: writing ? [] : ys, side: sideOf(c, leftOn) };
@@ -184,11 +209,13 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
       const x1 = (side === "left" ? sr.left - cr.left : sr.right - cr.left) / z;
       const x2 = side === "left" ? (ml!.right - cr.left) / z - 1 : (mr.left - cr.left) / z + 1;
       // A left card stretched wider than its margin would poke out past the card's edge: make room for it.
-      if (side === "left") padL = Math.max(0, ...items.map((o) => (cardRefs.current.get(o.c.id)?.offsetWidth ?? 0) - ml!.width / z), 0);
+      if (side === "left") padL = Math.max(0, ...items.map((o) => (cardRefs.current.get(o.c.id)?.offsetWidth ?? 0) + (o.c.nudge?.away || 0) - ml!.width / z), 0);
       for (const o of items) {
         const top = Math.round(tops[o.c.id]);
         tops[o.c.id] = top;
-        o.ys.forEach((y, i) => threads.push({ key: `${o.c.id}:${i}`, annId: o.c.id, x1: Math.round(x1), y1: Math.round(y), x2: Math.round(x2), y2: Math.round(top + 22) }));
+        // A card dragged further from the page takes its thread with it.
+        const away = o.c.nudge?.away || 0, cx2 = x2 + (side === "left" ? -away : away);
+        o.ys.forEach((y, i) => threads.push({ key: `${o.c.id}:${i}`, annId: o.c.id, x1: Math.round(x1), y1: Math.round(y), x2: Math.round(cx2), y2: Math.round(top + 22) }));
       }
     }
     const next = { tops, threads, leftOn, padL: Math.ceil(padL), colSide, colH };
@@ -196,7 +223,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   }, [children, focusId, sideOf, writing, readingBeside, compact]);
   const raf = useRef(0);
   const scheduleLayout = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(compute); }, [compute]);
-  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, zoom, readingBeside]);
+  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, zoom, readingBeside, pageW, pageX]);
   useEffect(() => {
     const ro = new ResizeObserver(scheduleLayout);
     if (canvasRef.current) ro.observe(canvasRef.current);
@@ -612,7 +639,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
               : <div className="card-failed"><p>{node.error || "This page didn't finish opening."}</p><div className="row"><button className="btn btn-secondary btn-sm" onClick={() => loadUrl(node.id)}><RotateCw size={13} />Try again</button>{url && <a className="btn btn-ghost btn-sm" href={url} target="_blank" rel="noopener"><ExternalLink size={13} />Open in browser</a>}</div></div>}
           </div>
         ) : (
-          <div className={`zoom-box${zoom > 1 ? " zoomed-in" : ""}`} style={zoom !== 1 ? ({ zoom } as CSSProperties) : undefined}>
+          <div className={`zoom-box${zoom > 1 ? " zoomed-in" : ""}`} style={{ ...(zoom !== 1 ? { zoom } : {}), ...(pageW ? { "--sheet-w": `${pageW}px` } : {}) } as CSSProperties}>
           <div className={`canvas${dragMarginW != null ? " resizing" : ""}${branchesOpen && !compact ? " with-margin" : ""}${layout.colSide ? ` col-${layout.colSide}` : ""}`} ref={canvasRef}
             style={{ ...(marginW ? { "--margin-user": `${marginW}px` } : {}), ...(layout.padL ? { paddingLeft: `calc(28px + ${layout.padL}px)` } : {}) } as CSSProperties}
             onMouseDown={(e) => {
@@ -628,10 +655,17 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
               {children.filter((c) => sideOf(c, layout.leftOn) === "left").map((c) => <BranchCard key={c.id} {...branchProps(c)} side="left" top={layout.tops[c.id] ?? -9999} setRef={(el) => { if (el) cardRefs.current.set(c.id, el); else cardRefs.current.delete(c.id); }} />)}
             </aside>
 
-            <div className={`sheet-wrap${writable ? " writable" : ""}${doc && (doc.type === "book" || toc.length > 2) ? " bookish" : ""}`} ref={sheetRef}
+            <div className={`sheet-wrap${writable ? " writable" : ""}${doc && (doc.type === "book" || toc.length > 2) ? " bookish" : ""}${livePage ? " page-moving" : ""}`} ref={sheetRef}
+              style={pageX ? { left: pageX } : undefined}
               onMouseUp={onSheetMouseUp}
               onMouseOver={onSheetOver} onMouseOut={onSheetOut} onClick={onSheetClick}
               onDragStart={(e) => { if (sel) { dragSelRef.current = sel.anchor; e.dataTransfer.setData("application/x-rd-sel", "1"); } }}>
+              {!compact && (<>
+                <button className="page-grip" data-testid="page-grip" aria-label="Move the page sideways (double-click to centre it)" title="Drag to move the page · double-click to centre"
+                  onPointerDown={startPageDrag("move")} onDoubleClick={() => setUI({ sheetShift: 0 })}><GripHorizontal size={14} /></button>
+                <button className="page-edge" data-testid="page-edge" aria-label="Make the page wider or narrower (double-click to reset)" title="Drag to resize the page · double-click to reset"
+                  onPointerDown={startPageDrag("size")} onDoubleClick={() => setUI({ sheetWidth: undefined, sheetShift: 0 })} />
+              </>)}
               {writing ? (
                 <article className="sheet writing">
                   {header}

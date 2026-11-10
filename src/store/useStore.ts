@@ -31,6 +31,9 @@ export interface UIState {
   reader: null | { url: string; title?: string; treeId: string; parentId: string; anchor: Anchor | null; nodeId?: string };
   /** How large the page reads in Read view (1 = normal). Zoom out to see the whole page and both margins. */
   readZoom?: number;
+  /** The page's own width and sideways position in Read view, set by dragging its edge and its grip. Unset means the defaults. */
+  sheetWidth?: number;
+  sheetShift?: number;
   /** A source branch whose article is open in place in its margin card. */
   readingBeside?: string | null;
   /** A branch open in the floating editor (Open on a note, definition, explanation or clipping). Not saved. */
