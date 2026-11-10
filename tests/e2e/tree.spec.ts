@@ -301,7 +301,9 @@ test.describe("Moving between cards", () => {
     await openTree(page, "tr-payments", ["n-stripe", "n-primer", "n-pci"]);
     const stack = page.getByTestId("card-stack");
     await expect.poll(() => stack.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
-    const start = await stack.evaluate((el) => el.scrollLeft);
+    // Wait for the slide to the last card to finish, or it carries on after the swipe and undoes it.
+    let start = -1;
+    await expect.poll(async () => { const x = await stack.evaluate((el) => el.scrollLeft); const settled = x === start; start = x; return settled; }, { intervals: [150] }).toBe(true);
     const text = card(page, "n-pci").locator("[data-block]").first();
     const box = (await text.boundingBox())!;
     await page.mouse.move(box.x + 40, box.y + 10);

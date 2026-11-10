@@ -1,8 +1,11 @@
 // A branch in a card's margin. One component with a variant per kind; click a source to open it as the next card, anything else to open it over the workspace.
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent } from "react";
-import { ArrowLeftRight, ArrowRight, ExternalLink, MessageCircle, Pencil, RotateCw, Sparkles, Trash2 } from "lucide-react";
-import type { Depth, Track, TreeNode } from "../../data/types";
+import { ArrowLeftRight, ArrowRight, BookOpen, ExternalLink, PenLine, MessageCircle, Pencil, RotateCw, Sparkles, Trash2 } from "lucide-react";
+import type { Anchor, Depth, Track, TreeNode } from "../../data/types";
 import { TRACK_LABEL, otherTrack } from "../../lib/tracks";
+import { selectionAnchor } from "../../lib/anchors";
+import { appendExcerpt } from "../../lib/writing";
+import { toast } from "../../lib/toast";
 import { useStore } from "../../store/useStore";
 import { Markdown, Segmented, SourceChip } from "../ui";
 import { siteName } from "../../lib/clipboard";
@@ -29,6 +32,10 @@ interface Props {
   onOpen: () => void;
   /** Open a web address (e.g. a definition's Wikipedia page) in the reader over the workspace. */
   onRead?: (url: string) => void;
+  /** Sources: open (or close) the article right here in the margin, beside the page you're writing on. */
+  onReadBeside?: () => void;
+  /** The article is open in this card. */
+  reading?: boolean;
   onHover: (on: boolean) => void;
   onEdit: () => void;
   onDone: () => void;
@@ -38,9 +45,30 @@ interface Props {
   onResize: () => void;
 }
 
-export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
+export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onReadBeside, reading, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
   const { updateNode, removeNode } = useStore.getState();
   const doc = useStore((s) => (n.docId ? s.docs[n.docId] : undefined));
+  // A source shows its article when you open it here, or when you've stretched its card to read in.
+  const showArticle = n.kind === "source" && !!doc && !inline && (!!reading || !!n.size);
+  const articleRef = useRef<HTMLDivElement>(null);
+  const [excerpt, setExcerpt] = useState<{ anchor: Anchor; x: number; y: number } | null>(null);
+  const readExcerpt = () => setTimeout(() => {
+    const el = articleRef.current, card = elRef.current;
+    if (!el || !card || !doc || locked) return;
+    const info = selectionAnchor({ id: n.id, blocks: doc.blocks }, el);
+    if (!info) { setExcerpt(null); return; }
+    const z = useStore.getState().ui.readZoom ?? 1, cr = card.getBoundingClientRect();
+    setExcerpt({ anchor: info.anchor, x: (info.rect.left + info.rect.width / 2 - cr.left) / z, y: (info.rect.top - cr.top) / z });
+  }, 0);
+  /** Send the selected words to your writing as a quotation, linked to exactly where they are in this source. */
+  const citeExcerpt = () => {
+    if (!excerpt || !doc) return;
+    const t = useStore.getState().trees.find((x) => x.id === n.treeId);
+    useStore.getState().updateTree(n.treeId, { understanding: appendExcerpt(t?.understanding || "", excerpt.anchor, doc.title) });
+    useStore.getState().setUI({ drawer: "understanding", focus: false });
+    window.getSelection()?.removeAllRanges(); setExcerpt(null);
+    toast("Excerpt added to your writing, linked to the source");
+  };
   const elRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [armed, setArmed] = useState(false);
@@ -55,10 +83,12 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
     const el = elRef.current;
     if (!el) return;
     const x0 = e.clientX, y0 = e.clientY, w0 = el.offsetWidth, h0 = el.offsetHeight;
+    // The page may be zoomed: pointer distances are on screen, sizes are in page units.
+    const z = useStore.getState().ui.readZoom ?? 1;
     let next = { w: w0, h: h0 };
     const move = (ev: PointerEvent) => {
-      const dx = (ev.clientX - x0) * (side === "left" ? -1 : 1);
-      next = { w: Math.round(clamp(w0 + dx, 180, 560)), h: Math.round(clamp(h0 + ev.clientY - y0, 72, 900)) };
+      const dx = ((ev.clientX - x0) / z) * (side === "left" ? -1 : 1);
+      next = { w: Math.round(clamp(w0 + dx, 180, 560)), h: Math.round(clamp(h0 + (ev.clientY - y0) / z, 72, 900)) };
       setLiveSize(next);
     };
     const up = () => {
@@ -103,7 +133,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
   // Buttons, links and inputs keep their own behaviour.
   const onClick = (e: MouseEvent) => {
     const t = e.target as HTMLElement;
-    if (editing || t.closest("button, a, input, textarea, form, [role=radiogroup]")) return;
+    if (editing || t.closest("button, a, input, textarea, form, [role=radiogroup], .bcard-article")) return;
     if (editable && n.body && t.closest(".bcard-note, .bcard-body") && !window.getSelection()?.toString()) { onEdit(); return; }
     onOpen();
   };
@@ -119,7 +149,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       data-testid="branch-card"
       data-kind={n.kind}
       data-side={inline ? undefined : side}
-      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${editable ? " editable" : ""}`}
+      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${editable ? " editable" : ""}`}
       style={!inline ? { ...(top != null ? { top } : {}), ...(size ? { width: size.w, height: size.h } : {}) } : undefined}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
@@ -145,6 +175,16 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
           {n.pending ? <p className="bcard-meta"><span className="thinking"><i /><i /><i /></span> Opening…</p>
             : n.error ? <p className="bcard-error">{n.error} <button className="link-btn" onClick={() => loadUrl(n.id)}><RotateCw size={11} /> Retry</button></p>
             : <p className="bcard-meta">{meta}{doc?.warning ? " · may be incomplete" : ""}</p>}
+          {showArticle && doc && (
+            <div className="bcard-article serif" ref={articleRef} data-testid="article" aria-label={`${n.title}, the article`} onMouseUp={readExcerpt} onKeyUp={readExcerpt}>
+              {doc.blocks.map((b) => (b.kind === "h" ? <h4 key={b.id} data-block={b.id}>{b.text}</h4> : <p key={b.id} data-block={b.id}>{b.text}</p>))}
+            </div>
+          )}
+          {excerpt && (
+            <div className="excerpt-bar" style={{ left: excerpt.x, top: Math.max(4, excerpt.y - 42) }} onMouseDown={(e) => e.preventDefault()}>
+              <button onClick={citeExcerpt} data-testid="excerpt-cite"><PenLine size={13} />Add to writing</button>
+            </div>
+          )}
         </>
       )}
 
@@ -214,6 +254,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       {!editing && (
         <div className="bcard-actions">
           <button onClick={onOpen} title={n.kind === "source" ? "Open as the next card" : "Open to read and write"}><ArrowRight size={13} />Open</button>
+          {n.kind === "source" && onReadBeside && <button onClick={onReadBeside} aria-expanded={!!reading} title={reading ? "Fold the article back into the card" : "Read the article here, beside the page you're writing on"}><BookOpen size={13} />{reading ? "Close article" : "Read here"}</button>}
           {editable && <button onClick={onEdit}><Pencil size={13} />Edit</button>}
           {n.kind === "definition" && n.body && !locked && <button onClick={() => explainNode(n)} title="Claude explains this term in the margin"><Sparkles size={13} />Explain</button>}
           <button onClick={onAsk} title="Ask Claude about this"><MessageCircle size={13} />Ask</button>

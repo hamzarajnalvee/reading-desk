@@ -38,7 +38,12 @@ export function AddDialog(p: Props) {
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const firstRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
-  useEffect(() => { setTimeout(() => firstRef.current?.focus(), 30); setError(null); }, [tab]);
+  useEffect(() => {
+    // Put the cursor in the tab's first field, unless you've already started typing in one.
+    const t = setTimeout(() => { if (!document.activeElement?.matches("input, textarea")) firstRef.current?.focus(); }, 30);
+    setError(null);
+    return () => clearTimeout(t);
+  }, [tab]);
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && p.onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [p]);
 
   const finishDoc = (doc: Awaited<ReturnType<typeof ingestText>>) => {

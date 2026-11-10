@@ -12,11 +12,64 @@ test.describe("Essay workspace", () => {
     await dialog.getByRole("textbox", { name: "Title" }).fill("The case for the trivial");
     await dialog.getByRole("textbox", { name: "Text" }).fill("Painting a wall teaches patience the screen never will.");
     await dialog.getByRole("button", { name: "Add branch" }).click();
-    // A source opens as the next card, and sits unlinked in the seed's margin.
-    await expect(page.getByTestId("card")).toHaveCount(2);
-    await expect(page.getByTestId("card").last()).toContainText("Painting a wall");
+    // The source opens in the seed's margin with its article showing, while the seed stays open to write on.
+    await expect(page.getByTestId("card")).toHaveCount(1);
     const branch = card(page, "n-telos").locator('[data-testid="branch-card"][data-kind="source"]');
     await expect(branch).toContainText("Not linked");
+    await expect(branch.getByTestId("article")).toContainText("Painting a wall");
+    // It sits beside the seed on screen, and stays there while you write on the seed.
+    const onScreen = async () => { const b = await branch.boundingBox(); return !!b && b.y > 0 && b.y < 900; };
+    await expect.poll(onScreen).toBe(true);
+    await card(page, "n-telos").locator(".sheet [data-block]").first().click();
+    await expect(card(page, "n-telos").getByRole("textbox", { name: "Your writing" })).toBeVisible();
+    await expect.poll(onScreen).toBe(true);
+    await page.keyboard.press("Escape");
+    // It folds away and opens again from its own button.
+    // Select words in the article and send them to your writing, quoted and linked to their place in the source.
+    await branch.getByTestId("article").locator("[data-block]").first().evaluate((el) => {
+      const t = el.firstChild!, r = document.createRange();
+      r.setStart(t, 0); r.setEnd(t, "Painting a wall".length);
+      const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
+    });
+    await branch.getByTestId("article").dispatchEvent("mouseup");
+    await branch.getByTestId("excerpt-cite").click();
+    await expect(page.getByRole("textbox", { name: "Your writing" })).toHaveValue(/> Painting a wall\n> — \[The case for the trivial\]\(#cite:/);
+    await page.getByTestId("cite").first().click();
+    await expect(page.getByTestId("card")).toHaveCount(2);
+    // The article folds away from its own button.
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.locator(".trail-bar button").first().click();
+    await expect(page.getByTestId("card")).toHaveCount(1);
+    await branch.getByRole("button", { name: "Close article" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(branch.getByTestId("article")).toHaveCount(0);
+  });
+
+  test("Read view zooms out to show more of the page, and remembers it", async ({ page }) => {
+    await openTree(page, "tr-payments");
+    const sheet = card(page, "n-stripe").locator(".sheet").first();
+    const before = (await sheet.boundingBox())!.width;
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    await expect(page.getByTestId("zoom")).toContainText("80%");
+    await expect.poll(async () => (await sheet.boundingBox())!.width).toBeLessThan(before * 0.9);
+    await page.waitForTimeout(400);
+    await page.reload();
+    await expect(page.getByTestId("zoom")).toContainText("80%");
+    await page.getByRole("button", { name: /Reset/ }).click();
+    await expect(page.getByTestId("zoom")).toContainText("100%");
+  });
+
+  test("zooming in keeps the page whole, and you scroll sideways to see the margins", async ({ page }) => {
+    await openTree(page, "tr-payments");
+    await showBranches(page);
+    const c = card(page, "n-stripe");
+    const scroller = c.locator(".card-scroll");
+    for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Zoom in" }).click();
+    await expect(page.getByTestId("zoom")).toContainText("150%");
+    await expect.poll(() => scroller.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeGreaterThan(100);
+    // Threads still meet their branches when zoomed: the selection toolbar appears over the passage.
+    await selectPhrase(c, "two-person company");
   });
 
   test("a note written to the seed waits in its margin", async ({ page }) => {

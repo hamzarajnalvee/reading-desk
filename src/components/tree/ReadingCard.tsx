@@ -41,6 +41,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const allHighlights = useStore((s) => s.highlights);
   const savedMarginW = useStore((s) => s.ui.marginWidth);
   const branchesOpen = useStore((s) => !!s.ui.branchesOpen);
+  const readingBeside = useStore((s) => s.ui.readingBeside ?? null);
   const { addBranch, updateNode, addAnchor, addHighlight, updateHighlight, removeHighlight, setUI } = useStore.getState();
   const locked = !!tree.locked;
   /** Your own writing can be typed into directly. Sources keep the original's words. */
@@ -85,7 +86,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const [focusId, setFocusId] = useState<string | null>(null);
   const [hotId, setHotId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [layout, setLayout] = useState<{ tops: Record<string, number>; threads: Thread[]; leftOn: boolean }>({ tops: {}, threads: [], leftOn: false });
+  const [layout, setLayout] = useState<{ tops: Record<string, number>; threads: Thread[]; leftOn: boolean; padL?: number }>({ tops: {}, threads: [], leftOn: false });
   const [caretY, setCaretY] = useState<number | null>(null);
   const [caretSide, setCaretSide] = useState<"left" | "right">("right");
   const [dropOn, setDropOn] = useState(false);
@@ -102,8 +103,12 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const [progress, setProgress] = useState(0);
   const [dragMarginW, setDragMarginW] = useState<number | null>(null);
   const marginW = dragMarginW ?? savedMarginW;
+  /** Read view zoom. The page and its margins are scaled as one (CSS zoom), so on-screen distances are divided by it to get page units. */
+  const zoom = useStore((s) => (compact ? 1 : s.ui.readZoom ?? 1));
+  const zRef = useRef(zoom);
+  zRef.current = zoom;
 
-  const toCanvas = useCallback((x: number, y: number) => { const r = canvasRef.current!.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; }, []);
+  const toCanvas = useCallback((x: number, y: number) => { const r = canvasRef.current!.getBoundingClientRect(); const z = zRef.current; return { x: (x - r.left) / z, y: (y - r.top) / z }; }, []);
   const canvasW = () => canvasRef.current?.clientWidth || 900;
   const clearSel = () => { window.getSelection()?.removeAllRanges(); setSel(null); };
 
@@ -116,6 +121,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     if (!margin.offsetParent) { setLayout((p) => (p.threads.length ? { tops: {}, threads: [], leftOn: p.leftOn } : p)); return; }
     const leftOn = !!marginL?.offsetParent;
     const cr = canvas.getBoundingClientRect(), mr = margin.getBoundingClientRect(), sr = sheet.getBoundingClientRect();
+    const z = zRef.current;
     const ml = leftOn ? marginL!.getBoundingClientRect() : null;
     const all = children.map((c) => {
       let y: number | null = null;
@@ -124,19 +130,22 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
         const m = markFor(sheet, c.id, a.blockId);
         if (!m) continue;
         const r = m.getBoundingClientRect();
-        if (y == null) y = r.top - cr.top;
-        ys.push(r.top - cr.top + Math.min(r.height, 26) / 2);
+        if (y == null) y = (r.top - cr.top) / z;
+        ys.push((r.top - cr.top + Math.min(r.height, 26) / 2) / z);
       }
       if (y == null && c.marginY != null) y = c.marginY;
       return { c, y, ys, side: sideOf(c, leftOn) };
     }).filter((o): o is { c: TreeNode; y: number; ys: number[]; side: "left" | "right" } => o.y != null).sort((p, q) => p.y - q.y);
     const tops: Record<string, number> = {};
     const threads: Thread[] = [];
+    let padL = 0;
     const height = (id: string) => cardRefs.current.get(id)?.offsetHeight ?? 90;
     const GAP = 12;
     // Each margin is laid out on its own: cards stack top to bottom, each at its passage or just below the one before.
     for (const side of ["left", "right"] as const) {
       const items = all.filter((o) => o.side === side);
+      // A narrow card hides the left margin; its branches move to the right one, so there's nothing to lay out here.
+      if (!items.length || (side === "left" && !ml)) continue;
       const stack = () => { let floor = 0; for (const o of items) { const t = Math.max(o.y - 6, floor); tops[o.c.id] = t; floor = t + height(o.c.id) + GAP; } };
       // The branch you're working on sits right beside its passage; the others move out of its way.
       const fi = focusId ? items.findIndex((o) => o.c.id === focusId) : -1;
@@ -151,27 +160,34 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
         if (!fits) stack();
       }
       // Threads leave the page from the edge nearest the card's margin.
-      const x1 = side === "left" ? sr.left - cr.left : sr.right - cr.left;
-      const x2 = side === "left" ? ml!.right - cr.left - 1 : mr.left - cr.left + 1;
+      const x1 = (side === "left" ? sr.left - cr.left : sr.right - cr.left) / z;
+      const x2 = side === "left" ? (ml!.right - cr.left) / z - 1 : (mr.left - cr.left) / z + 1;
+      // A left card stretched wider than its margin would poke out past the card's edge: make room for it.
+      if (side === "left") padL = Math.max(0, ...items.map((o) => (cardRefs.current.get(o.c.id)?.offsetWidth ?? 0) - ml!.width / z));
       for (const o of items) {
         const top = Math.round(tops[o.c.id]);
         tops[o.c.id] = top;
         o.ys.forEach((y, i) => threads.push({ key: `${o.c.id}:${i}`, annId: o.c.id, x1: Math.round(x1), y1: Math.round(y), x2: Math.round(x2), y2: Math.round(top + 22) }));
       }
     }
-    const next = { tops, threads, leftOn };
+    const next = { tops, threads, leftOn, padL: Math.ceil(padL) };
     setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   }, [children, focusId, sideOf]);
   const raf = useRef(0);
   const scheduleLayout = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(compute); }, [compute]);
-  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn]);
+  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, zoom, readingBeside]);
   useEffect(() => {
     const ro = new ResizeObserver(scheduleLayout);
     if (canvasRef.current) ro.observe(canvasRef.current);
     if (sheetRef.current) ro.observe(sheetRef.current);
+    // The margins appear and disappear (branches shown, writing mode, a narrow window), and branch cards change size
+    // (an article opening, a resize): any of these moves where the cards belong.
+    if (marginRef.current) ro.observe(marginRef.current);
+    if (marginLeftRef.current) ro.observe(marginLeftRef.current);
+    cardRefs.current.forEach((el) => ro.observe(el));
     document.fonts?.ready.then(scheduleLayout);
     return () => ro.disconnect();
-  }, [scheduleLayout]);
+  }, [scheduleLayout, children]);
 
   /* ---------- selection ---------- */
   const readSelection = useCallback(() => {
@@ -179,8 +195,8 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     if (locked) { setSel(null); return; }
     const info = selectionAnchor(content, sheetRef.current);
     if (!info) { setSel(null); return; }
-    const c = canvasRef.current.getBoundingClientRect();
-    setSel({ anchor: info.anchor, tx: info.rect.left + info.rect.width / 2 - c.left, ty: info.rect.top - c.top, hx: info.endRect.right - c.left, hy: info.endRect.top + info.endRect.height / 2 - c.top });
+    const c = canvasRef.current.getBoundingClientRect(), z = zRef.current;
+    setSel({ anchor: info.anchor, tx: (info.rect.left + info.rect.width / 2 - c.left) / z, ty: (info.rect.top - c.top) / z, hx: (info.endRect.right - c.left) / z, hy: (info.endRect.top + info.endRect.height / 2 - c.top) / z });
   }, [content, locked]);
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>;
@@ -203,7 +219,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     const sheet = sheetRef.current, canvas = canvasRef.current;
     if (!sheet || !canvas) return "right";
     const sr = sheet.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
-    return x < sr.left - cr.left + sr.width / 2 ? "left" : "right";
+    return x < (sr.left - cr.left + sr.width / 2) / zRef.current ? "left" : "right";
   };
   const act = (a: SelectionAction) => {
     if (!sel) return;
@@ -428,7 +444,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     const x0 = e.clientX, w0 = marginRef.current?.offsetWidth || 300;
     let w = w0;
     // Dragging left widens the margin (the page gives up the space); dragging right narrows it.
-    const move = (ev: PointerEvent) => { w = clamp(w0 + (x0 - ev.clientX), MARGIN_MIN, MARGIN_MAX); setDragMarginW(w); };
+    const move = (ev: PointerEvent) => { w = clamp(w0 + (x0 - ev.clientX) / zRef.current, MARGIN_MIN, MARGIN_MAX); setDragMarginW(w); };
     const up = () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
       setUI({ marginWidth: Math.round(w) }); setDragMarginW(null);
@@ -505,6 +521,8 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     // Sources open as the next card; everything else opens over the workspace to read and type into.
     onOpen: () => (c.kind === "source" ? onOpen(c.id) : setUI({ popup: c.id })),
     onRead: (url: string) => setUI({ reader: { url, treeId: tree.id, parentId: node.id, anchor: c.anchors[0] || null } }),
+    reading: readingBeside === c.id,
+    onReadBeside: c.kind === "source" ? () => { setUI({ readingBeside: readingBeside === c.id ? null : c.id }); setFocusId(c.id); } : undefined,
     onHover: (on: boolean) => setHotId(on ? c.id : null),
     onEdit: () => { setEditingId(c.id); setFocusId(c.id); },
     onDone: () => setEditingId(null),
@@ -572,7 +590,9 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
               : <div className="card-failed"><p>{node.error || "This page didn't finish opening."}</p><div className="row"><button className="btn btn-secondary btn-sm" onClick={() => loadUrl(node.id)}><RotateCw size={13} />Try again</button>{url && <a className="btn btn-ghost btn-sm" href={url} target="_blank" rel="noopener"><ExternalLink size={13} />Open in browser</a>}</div></div>}
           </div>
         ) : (
-          <div className={`canvas${dragMarginW != null ? " resizing" : ""}${branchesOpen && !compact ? " with-margin" : ""}`} ref={canvasRef} style={marginW ? ({ "--margin-user": `${marginW}px` } as CSSProperties) : undefined}
+          <div className={`zoom-box${zoom > 1 ? " zoomed-in" : ""}`} style={zoom !== 1 ? ({ zoom } as CSSProperties) : undefined}>
+          <div className={`canvas${dragMarginW != null ? " resizing" : ""}${branchesOpen && !compact ? " with-margin" : ""}`} ref={canvasRef}
+            style={{ ...(marginW ? { "--margin-user": `${marginW}px` } : {}), ...(layout.padL ? { paddingLeft: `calc(28px + ${layout.padL}px)` } : {}) } as CSSProperties}
             onMouseDown={(e) => {
               const t = e.target as HTMLElement;
               if (t.closest(".sheet") && !t.closest("mark")) setSel(null);
@@ -634,6 +654,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
                 <button className="danger" onClick={() => { removeHighlight(hlMenu.id); setHlMenu(null); }}>Remove highlight</button>
               </div>
             )}
+          </div>
           </div>
         )}
       </div>

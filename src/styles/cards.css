@@ -45,7 +45,7 @@
 .spine-n { font-family: var(--font-mono); font-size: 11px; }
 .spine-title { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-serif); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 70vh; }
 .card-close { position: absolute; top: 10px; right: 12px; z-index: 6; background: var(--surface-raised); border: 1px solid var(--hairline); }
-.card-scroll { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; position: relative; container-type: inline-size; container-name: card; }
+.card-scroll { flex: 1; min-width: 0; overflow-y: auto; overflow-x: auto; position: relative; container-type: inline-size; container-name: card; }
 .card-loading, .card-failed { max-width: 640px; margin: 48px auto; padding: 0 24px; display: grid; gap: 14px; }
 .card-failed .row { display: flex; gap: 8px; }
 
@@ -438,3 +438,31 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .nb-empty { text-align: center; }
 @media (prefers-reduced-motion: reduce) { .bcard .track-chip { transition: none; } }
 @media (max-width: 760px) { .nb-inner { padding: 20px 16px 80px; } .map-filter { top: auto; bottom: 12px; } }
+
+/* ---------- Zoom (Read view) and the reader beside the page ---------- */
+.zoom-ctl { position: absolute; right: 16px; bottom: 16px; z-index: 30; display: flex; align-items: center; gap: 2px; background: var(--surface-raised); border: 1px solid var(--hairline); border-radius: var(--r-pill); padding: 3px; box-shadow: var(--shadow-pop); }
+.zoom-pct { min-width: 48px; font: inherit; font-size: var(--text-xs); color: var(--ink-2); background: none; border: 0; cursor: pointer; padding: 4px 2px; border-radius: var(--r-sm); }
+.zoom-pct:hover { color: var(--ink); background: var(--sidebar-hover); }
+.tree-body.with-reader > .stack { margin-right: min(584px, calc(100% - 320px)); }
+.tree-body.with-reader > .zoom-ctl { right: min(600px, calc(100% - 304px)); }
+@media (max-width: 760px) { .tree-body.with-reader > .stack { margin-right: 0; } }
+
+/* The page and its margins zoom as one. The box is the "card" container, so the layout responds to the zoomed width:
+   zoomed out there is room for both margins; zoomed in the page keeps its full width and you scroll sideways. */
+.zoom-box { container-type: inline-size; container-name: card; min-height: 100%; display: flex; flex-direction: column; }
+.zoom-box > .canvas { flex: 1; }
+.zoom-box.zoomed-in { min-width: calc(var(--sheet-w) + 56px); }
+.zoom-box.zoomed-in:has(.canvas.with-margin) { min-width: calc(var(--sheet-w) + 2 * var(--margin-user, var(--margin-w)) + 144px); }
+
+/* A source read in place: the margin card widens to a comfortable reading measure and scrolls within itself. */
+.bcard.reading:not(.sized):not(.inline) { width: min(520px, max(100%, calc((100cqw - var(--sheet-w)) / 2 - 56px))); z-index: 4; box-shadow: var(--shadow-pop); cursor: default; }
+.bcard.side-left.reading:not(.sized):not(.inline) { left: auto; right: 0; }
+.bcard-article { margin-top: 10px; max-height: min(70vh, 720px); overflow: auto; padding-right: 6px; font-size: var(--text-md); line-height: 1.6; color: var(--ink); cursor: text; user-select: text; overscroll-behavior: contain; }
+.bcard-article p { margin: 0 0 0.8em; }
+.bcard-article h4 { margin: 1em 0 0.4em; font-size: var(--text-lg); }
+/* A stretched source card reads its article in all the room you gave it. */
+.bcard.sized.reading { display: flex; flex-direction: column; overflow: hidden; }
+.bcard.sized.reading .bcard-article { flex: 1; max-height: none; min-height: 0; }
+.excerpt-bar { position: absolute; z-index: 6; transform: translateX(-50%); background: var(--capsule); color: var(--capsule-ink); border-radius: var(--r-pill); padding: 3px; box-shadow: var(--shadow-pop); white-space: nowrap; }
+.excerpt-bar button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: var(--text-sm); color: inherit; background: none; border: 0; padding: 5px 12px; border-radius: var(--r-pill); cursor: pointer; }
+.excerpt-bar button:hover { background: var(--capsule-active); }

@@ -76,12 +76,12 @@ export function TreeScreen() {
     setUI({ jumpTo: { nodeId, blockId } });
     go(trailTo(nodeId));
   };
-  /** Something added straight to the seed: sources open as the next card; the rest wait in the seed's margin. */
+  /** Something added straight to the seed waits in its margin. A source opens there with its article showing, beside the seed you write on. */
   const added = (id: string) => {
     setAdding(false);
     const n = useStore.getState().nodes[id];
-    if (n?.kind === "source") go(trailTo(id));
-    else { setUI({ branchesOpen: true }); go([tree.seedId]); }
+    setUI({ branchesOpen: true, ...(n?.kind === "source" ? { readingBeside: id } : {}) });
+    go([tree.seedId]);
   };
   const pin = (a: Anchor, text: string) => {
     const parent = nodes[a.docId];
@@ -124,13 +124,13 @@ export function TreeScreen() {
         </button>
       )}
 
-      <div className="tree-body">
+      <div className={`tree-body${ui.reader && ui.reader.treeId === tree.id && view === "cards" ? " with-reader" : ""}`}>
         {view === "map" ? <TreeMap tree={tree} path={path} onOpenPath={(p) => go(p)} />
           : view === "notebook" ? <NotebookView tree={tree} onOpenPassage={openPassage} onOpenWriting={() => setUI({ drawer: "understanding", focus: false })} />
-          : <CardStack tree={tree} path={path} onPath={(p) => go(p)} />}
+          : <CardStack tree={tree} path={path} onPath={(p) => go(p)} zoom={ui.readZoom ?? 1} onZoom={(z) => setUI({ readZoom: z })} />}
         {ui.drawer === "understanding" && <UnderstandingDrawer tree={tree} onClose={() => setUI({ drawer: null })} onOpenPassage={openPassage} />}
         {ui.reader && ui.reader.treeId === tree.id && (
-          <ReaderPopup {...ui.reader} locked={!!tree.locked} onClose={() => setUI({ reader: null })} onKept={(id) => { setUI({ reader: null }); go(trailTo(id)); }} />
+          <ReaderPopup {...ui.reader} locked={!!tree.locked} onClose={() => setUI({ reader: null })} onKept={(id) => { setUI({ reader: null }); go(trailTo(id)); }} onOpenCard={(id) => { setUI({ reader: null }); go(trailTo(id)); }} />
         )}
         {popupNode && popupNode.treeId === tree.id && (
           <BranchPopup node={popupNode} locked={!!tree.locked} childCount={Object.values(nodes).filter((n) => n.parentId === popupNode.id).length}

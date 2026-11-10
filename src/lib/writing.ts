@@ -39,3 +39,15 @@ export const citeClick = (onOpenPassage: (nodeId: string, blockId: string) => vo
   e.preventDefault();
   onOpenPassage(c.nodeId, c.blockId);
 };
+
+/**
+ * Add an excerpt to the end of the writing: the words as a quotation, then a link to exactly where they came from.
+ *   > Painting a wall teaches patience.
+ *   > — [The Dark Side of Optimization](#cite:nodeId/blockId)
+ */
+export function appendExcerpt(text: string, a: Anchor, sourceTitle: string): string {
+  const t = (text || "").replace(/\s+$/, "");
+  const quote = a.quote.replace(/\s+/g, " ").trim();
+  const title = sourceTitle.replace(/[[\]]/g, "").trim() || "Source";
+  return (t ? t + "\n\n" : "") + `> ${quote}\n> — [${title}](#cite:${a.docId}/${a.blockId})\n\n`;
+}

@@ -27,7 +27,12 @@ export interface UIState {
   /** Show the margin of branch cards beside the page. Off by default so the page sits alone in the centre. */
   branchesOpen?: boolean;
   /** A web page or Wikipedia article open in the floating reader, and the passage that led there. Not saved. */
-  reader: null | { url: string; title?: string; treeId: string; parentId: string; anchor: Anchor | null };
+  /** With `nodeId`, it shows a source already in the tree (e.g. one you just added) instead of fetching `url`. */
+  reader: null | { url: string; title?: string; treeId: string; parentId: string; anchor: Anchor | null; nodeId?: string };
+  /** How large the page reads in Read view (1 = normal). Zoom out to see the whole page and both margins. */
+  readZoom?: number;
+  /** A source branch whose article is open in place in its margin card. */
+  readingBeside?: string | null;
   /** A branch open in the floating editor (Open on a note, definition, explanation or clipping). Not saved. */
   popup: string | null;
   /** A passage to scroll to once its card is open (from a link in your writing or the notebook). Not saved. */
