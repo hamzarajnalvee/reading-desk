@@ -1,23 +1,27 @@
-// Start a tree, or branch from a passage: write an idea, open a web address, add a file, or paste text.
+// Start a tree, branch from a passage, or add straight to a card with no passage (e.g. a paper onto the essay's seed):
+// write an idea, open a web address, add a file, paste text, or look a word up.
 import { useEffect, useRef, useState } from "react";
-import { FileUp, Globe, PenLine, ClipboardPaste, X } from "lucide-react";
+import { BookOpen, FileUp, Globe, PenLine, ClipboardPaste, X } from "lucide-react";
 import type { Anchor } from "../../data/types";
 import { useStore } from "../../store/useStore";
 import { ingestFile, ingestText, IngestError } from "../../lib/ingest";
 import { fetchAsDoc } from "../../lib/api";
-import { branchFromUrl, noteTitle } from "../../lib/actions";
+import { addDefinition, branchFromUrl, noteTitle } from "../../lib/actions";
 
-type Tab = "write" | "url" | "file" | "paste";
+type Tab = "write" | "url" | "file" | "paste" | "lookup";
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
   { id: "write", label: "Write", icon: <PenLine size={14} /> },
   { id: "url", label: "Web address", icon: <Globe size={14} /> },
   { id: "file", label: "File", icon: <FileUp size={14} /> },
   { id: "paste", label: "Paste text", icon: <ClipboardPaste size={14} /> },
 ];
+const LOOKUP = { id: "lookup" as Tab, label: "Look up", icon: <BookOpen size={14} /> };
+/** Where branches added without a passage sit in the margin, before you thread them to one. */
+const LOOSE_Y = 120;
 
 type Props =
   | { mode: "tree"; onClose: () => void; onCreated: (treeId: string) => void; anchor?: undefined; treeId?: undefined; parentId?: undefined }
-  | { mode: "branch"; anchor: Anchor; treeId: string; parentId: string; onClose: () => void; onCreated: (nodeId: string) => void };
+  | { mode: "branch"; anchor: Anchor | null; treeId: string; parentId: string; onClose: () => void; onCreated: (nodeId: string) => void };
 
 export function AddDialog(p: Props) {
   const { createTree, addBranch } = useStore.getState();
@@ -25,6 +29,11 @@ export function AddDialog(p: Props) {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
+  const [wiki, setWiki] = useState(false);
+  const loose = p.mode === "branch" && !p.anchor;
+  const anchors = p.mode === "branch" && p.anchor ? [p.anchor] : [];
+  const where = loose ? { marginY: LOOSE_Y } : {};
+  const tabs = loose ? [...TABS, LOOKUP] : TABS;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -34,7 +43,7 @@ export function AddDialog(p: Props) {
 
   const finishDoc = (doc: Awaited<ReturnType<typeof ingestText>>) => {
     if (p.mode === "tree") p.onCreated(createTree({ kind: "source", doc, title: title.trim() || doc.title }));
-    else p.onCreated(addBranch(p.treeId, { kind: "source", title: doc.title, parentId: p.parentId, anchors: [p.anchor], docId: doc.id, url: doc.url, doc }));
+    else p.onCreated(addBranch(p.treeId, { kind: "source", title: doc.title, parentId: p.parentId, anchors, docId: doc.id, url: doc.url, doc, ...where }));
   };
   const run = async (fn: () => Promise<void> | void) => {
     setError(null);
@@ -45,15 +54,22 @@ export function AddDialog(p: Props) {
     if (tab === "write") {
       if (!text.trim()) { setError("Write something first."); return; }
       if (p.mode === "tree") p.onCreated(createTree({ kind: "note", title: title.trim() || noteTitle(text), body: text.trim() }));
-      else p.onCreated(addBranch(p.treeId, { kind: "note", title: title.trim() || noteTitle(text), parentId: p.parentId, anchors: [p.anchor], body: text.trim() }));
+      else p.onCreated(addBranch(p.treeId, { kind: "note", title: title.trim() || noteTitle(text), parentId: p.parentId, anchors, body: text.trim(), ...where }));
     } else if (tab === "url") {
       let u = url.trim();
       if (!u) { setError("Enter a web address."); return; }
       if (!/^https?:\/\//i.test(u)) u = "https://" + u;
-      if (p.mode === "branch") { p.onCreated(branchFromUrl(p.treeId, p.parentId, p.anchor, u)); return; }
+      if (p.mode === "branch") {
+        const id = branchFromUrl(p.treeId, p.parentId, p.anchor, u);
+        if (loose) useStore.getState().updateNode(id, where);
+        p.onCreated(id); return;
+      }
       setBusy("Opening the page…");
       const doc = await fetchAsDoc(u, (m) => setBusy(m));
       finishDoc(doc);
+    } else if (tab === "lookup" && p.mode === "branch") {
+      if (!text.trim()) { setError("Enter a word or a name to look up."); return; }
+      p.onCreated(addDefinition(p.treeId, p.parentId, text, LOOSE_Y, wiki ? "wikipedia" : undefined));
     } else if (tab === "paste") {
       if (!text.trim()) { setError("Paste some text first."); return; }
       finishDoc(ingestText(title.trim(), text));
@@ -69,17 +85,18 @@ export function AddDialog(p: Props) {
 
   return (
     <div className="dialog-shade" onMouseDown={p.onClose}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={p.mode === "tree" ? "Start a tree" : "Branch from this passage"} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={p.mode === "tree" ? "Start a tree" : loose ? "Add to this tree" : "Branch from this passage"} onMouseDown={(e) => e.stopPropagation()}>
         <div className="dialog-head">
           <div>
-            <h2 className="serif">{p.mode === "tree" ? "Start a tree" : "Branch from this passage"}</h2>
-            {p.mode === "branch" ? <p className="dialog-quote serif">“{p.anchor.quote.slice(0, 160)}{p.anchor.quote.length > 160 ? "…" : ""}”</p>
+            <h2 className="serif">{p.mode === "tree" ? "Start a tree" : loose ? "Add to this tree" : "Branch from this passage"}</h2>
+            {p.mode === "branch" && p.anchor ? <p className="dialog-quote serif">“{p.anchor.quote.slice(0, 160)}{p.anchor.quote.length > 160 ? "…" : ""}”</p>
+              : loose ? <p className="muted">Add a paper, an article, a blog post, an excerpt or a definition. It joins the seed’s margin; drag its thread onto a sentence to link it to a passage.</p>
               : <p className="muted">Begin with an idea, a web page, a file or some text. Everything you follow from it grows into this tree.</p>}
           </div>
           <button className="icon-btn" aria-label="Close" onClick={p.onClose}><X size={16} /></button>
         </div>
         <div className="dialog-tabs" role="tablist">
-          {TABS.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>{t.icon}{t.label}</button>)}
+          {tabs.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>{t.icon}{t.label}</button>)}
         </div>
         <form className="dialog-body" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           {tab === "write" && (<>
@@ -99,6 +116,10 @@ export function AddDialog(p: Props) {
               <input ref={fileRef} type="file" hidden accept=".pdf,.epub,.docx,.html,.htm,.md,.markdown,.txt,text/*,application/pdf" onChange={(e) => onFiles(e.target.files)} />
             </label>
           )}
+          {tab === "lookup" && (<>
+            <input ref={firstRef} className="field" value={text} onChange={(e) => setText(e.target.value)} placeholder="A word, a name or an idea, e.g. deskilling" aria-label="Term to look up" />
+            <label className="check small"><input type="checkbox" checked={wiki} onChange={(e) => setWiki(e.target.checked)} /> Wikipedia only (skip the dictionary)</label>
+          </>)}
           {tab === "paste" && (<>
             <input ref={firstRef} className="field" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" aria-label="Title" />
             <textarea className="field serif" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste an article, a chapter or a passage" aria-label="Text" />
@@ -108,7 +129,7 @@ export function AddDialog(p: Props) {
           {tab !== "file" && (
             <div className="dialog-actions">
               <button type="button" className="btn btn-ghost" onClick={p.onClose}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={!!busy}>{p.mode === "tree" ? "Start tree" : tab === "url" ? "Open as branch" : "Add branch"}</button>
+              <button type="submit" className="btn btn-primary" disabled={!!busy}>{p.mode === "tree" ? "Start tree" : tab === "url" ? "Open as branch" : tab === "lookup" ? "Look up" : "Add branch"}</button>
             </div>
           )}
         </form>

@@ -1,24 +1,27 @@
-// Right-hand drawers on the tree screen: the Understanding note, and Ask Claude.
+// Right-hand drawers on the tree screen: your Writing (the essay or understanding note, linked to passages), and Ask Claude.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pin, Sparkles, Square, X } from "lucide-react";
+import { Link2, Pin, Sparkles, Square, X } from "lucide-react";
 import type { Anchor, ChatTurn, Tree } from "../../data/types";
 import { useStore } from "../../store/useStore";
 import { ask, summarise } from "../../lib/api";
 import { contentOf, plainText } from "../../lib/content";
-import { Markdown } from "../ui";
+import { Markdown, Segmented } from "../ui";
+import { citeClick, citesIn } from "../../lib/writing";
 import { timeAgo, plural } from "../../lib/util";
 import { toast } from "../../lib/toast";
 
 const NO_TURNS: ChatTurn[] = [];
 
-export function UnderstandingDrawer({ tree, onClose }: { tree: Tree; onClose: () => void }) {
+export function UnderstandingDrawer({ tree, onClose, onOpenPassage }: { tree: Tree; onClose: () => void; onOpenPassage: (nodeId: string, blockId: string) => void }) {
   const nodes = useStore((s) => s.nodes);
   const docs = useStore((s) => s.docs);
   const { updateTree } = useStore.getState();
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const ctl = useRef<AbortController | null>(null);
-  const words = (tree.understanding.match(/\S+/g) || []).length;
+  const words = (tree.understanding.replace(/\(#cite:[^)]*\)/g, "").match(/\S+/g) || []).length;
+  const [mode, setMode] = useState<"write" | "read">("write");
+  const cites = useMemo(() => citesIn(tree.understanding), [tree.understanding]);
 
   const material = () => Object.values(nodes).filter((n) => n.treeId === tree.id).sort((a, b) => a.createdAt - b.createdAt).map((n) => {
     const c = contentOf(n, docs);
@@ -36,10 +39,29 @@ export function UnderstandingDrawer({ tree, onClose }: { tree: Tree; onClose: ()
 
   return (
     <aside className="drawer" aria-label="Understanding" data-testid="understanding">
-      <div className="drawer-head"><h2 className="serif">Understanding</h2><button className="icon-btn" aria-label="Close" onClick={onClose}><X size={16} /></button></div>
-      <p className="muted small drawer-sub">What you understood from this tree, in your own words. Keep adding to it.</p>
-      <textarea className="understanding serif" value={tree.understanding} readOnly={tree.locked} onChange={(e) => updateTree(tree.id, { understanding: e.target.value })}
-        placeholder="The key ideas, how they connect, and what's still open…" aria-label="Understanding note" />
+      <div className="drawer-head"><h2 className="serif">Writing</h2>
+        <Segmented size="sm" label="Writing view" value={mode} onChange={setMode} options={[{ value: "write", label: "Write" }, { value: "read", label: "Read" }]} />
+        <button className="icon-btn" aria-label="Close" onClick={onClose}><X size={16} /></button></div>
+      <p className="muted small drawer-sub">Your essay or thoughts, in your own words. To link a passage, select it and press Cite (C).</p>
+      {mode === "write" ? (
+        <textarea className="understanding serif" value={tree.understanding} readOnly={tree.locked} onChange={(e) => updateTree(tree.id, { understanding: e.target.value })}
+          placeholder="Your argument, the key ideas, how they connect, and what's still open…" aria-label="Your writing" />
+      ) : (
+        <div className="writing-read serif" onClick={citeClick(onOpenPassage)}>
+          {tree.understanding.trim() ? <Markdown text={tree.understanding} /> : <p className="muted">Nothing written yet.</p>}
+        </div>
+      )}
+      {cites.length > 0 && (
+        <div className="cite-list" aria-label="Linked passages">
+          <div className="mono-label">Linked passages · {cites.length}</div>
+          {cites.map((c, i) => (
+            <button key={i} className="cite-item" data-testid="cite" disabled={!nodes[c.nodeId]} onClick={() => onOpenPassage(c.nodeId, c.blockId)}>
+              <Link2 size={12} aria-hidden /><span className="serif">{c.label}</span>
+              <span className="muted small">{nodes[c.nodeId] ? contentOf(nodes[c.nodeId], docs).title : "Branch deleted"}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="drawer-foot">
         <span className="muted small">{plural(words, "word")} · updated {timeAgo(tree.updatedAt)}</span>
         {busy ? <button className="btn btn-secondary btn-sm" onClick={() => ctl.current?.abort()}><Square size={12} />Stop</button>

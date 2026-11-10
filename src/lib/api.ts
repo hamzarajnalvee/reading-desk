@@ -34,6 +34,14 @@ export async function summarise(o: { title: string; material: string; signal?: A
   return streamInto(await post("/api/summarise", o, o.signal), o.onText);
 }
 
+/** Ask Claude to suggest a track for each branch. Only called from the Sort with Claude button. */
+export async function suggestTracks(statement: string, items: { id: string; kind: string; title: string; text?: string }[]): Promise<Record<string, "essay" | "rabbit">> {
+  const r = await post("/api/sort", { statement, items });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(j?.error || `Request failed (${r.status})`);
+  return j?.tracks || {};
+}
+
 /** Dictionary definition (Wiktionary / Wikipedia). Null when nothing was found. */
 export async function defineTerm(term: string, source?: "wikipedia"): Promise<{ term: string; text: string; source: Source } | null> {
   try {

@@ -17,6 +17,8 @@ import { branchAsk, branchDefinition, branchExplanation, branchWikipedia, loadUr
 import { toast } from "../../lib/toast";
 import { clamp, plural } from "../../lib/util";
 import { isTyping } from "../../lib/hooks";
+import { trackOf } from "../../lib/tracks";
+import { appendCite } from "../../lib/writing";
 
 type Sel = { anchor: Anchor; tx: number; ty: number; hx: number; hy: number };
 type Drag = { from: { anchor?: Anchor; nodeId?: string }; x1: number; y1: number; x2: number; y2: number };
@@ -217,6 +219,14 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
       case "wikipedia": place(branchWikipedia(tree.id, node.id, an)); break;
       case "ask": place(branchAsk(tree.id, node.id, an)); break;
       case "branch": setBranchAt(an); break;
+      case "cite": {
+        // Link the passage at the end of your writing, and show the writing so you can carry on from it.
+        const t = useStore.getState().trees.find((x) => x.id === tree.id);
+        useStore.getState().updateTree(tree.id, { understanding: appendCite(t?.understanding || "", an) });
+        setUI({ drawer: "understanding", focus: false });
+        toast("Linked in your writing");
+        break;
+      }
     }
     clearSel();
   };
@@ -261,6 +271,13 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     el.scrollIntoView({ block, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     setFlash(blockId); setTimeout(() => setFlash(null), 1600);
   };
+  // A link in your writing or the notebook asked for a passage on this card: scroll to it once the card has slid into place.
+  const jumpReq = useStore((s) => (s.ui.jumpTo?.nodeId === node.id ? s.ui.jumpTo.blockId : null));
+  useEffect(() => {
+    if (!jumpReq) return;
+    const t = setTimeout(() => { jumpTo(jumpReq); setUI({ jumpTo: null }); }, 380);
+    return () => clearTimeout(t);
+  }, [jumpReq]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusBranch = (id: string) => {
     setFocusId(id);
     reveal();
@@ -484,7 +501,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   };
 
   const branchProps = (c: TreeNode) => ({
-    node: c, editing: editingId === c.id, focused: focusId === c.id, hot: hotId === c.id, childCount: grandCounts[c.id] || 0,
+    node: c, track: trackOf(c, allNodes), editing: editingId === c.id, focused: focusId === c.id, hot: hotId === c.id, childCount: grandCounts[c.id] || 0,
     // Sources open as the next card; everything else opens over the workspace to read and type into.
     onOpen: () => (c.kind === "source" ? onOpen(c.id) : setUI({ popup: c.id })),
     onRead: (url: string) => setUI({ reader: { url, treeId: tree.id, parentId: node.id, anchor: c.anchors[0] || null } }),

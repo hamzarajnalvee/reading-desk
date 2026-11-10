@@ -130,3 +130,15 @@ export function explainNode(n: TreeNode) {
 
 /** The English Wikipedia article for a term, opened in the reader. */
 export const wikipediaUrl = (term: string) => `https://en.wikipedia.org/wiki/${encodeURIComponent(term.trim().replace(/\s+/g, "_"))}`;
+
+/** Look a term up (Wiktionary, then Wikipedia) and add it to a card without a passage, e.g. straight onto the seed. */
+export function addDefinition(treeId: string, parentId: string, term: string, marginY: number, source?: "wikipedia"): string {
+  const t = term.trim().slice(0, 120);
+  const id = S().addBranch(treeId, { kind: "definition", title: t, parentId, anchors: [], body: "", pending: true, marginY, ...(source ? { defSource: { site: "Wikipedia", url: wikipediaUrl(t) } } : {}) });
+  defineTerm(t, source).then((r) => {
+    if (!S().nodes[id]) return;
+    if (r) S().updateNode(id, { title: r.term, body: r.text, defSource: r.source, pending: false });
+    else S().updateNode(id, { pending: false });
+  });
+  return id;
+}

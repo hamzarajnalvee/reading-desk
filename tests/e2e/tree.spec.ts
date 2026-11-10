@@ -192,15 +192,15 @@ test.describe("Map, understanding, topics", () => {
     await expect(page.getByTestId("card")).toHaveCount(5);
   });
 
-  test("the understanding note saves as you type", async ({ page }) => {
+  test("your writing saves as you type", async ({ page }) => {
     await openTree(page, "tr-telos");
-    await page.getByRole("button", { name: "Understanding" }).click();
-    const note = page.getByRole("textbox", { name: "Understanding note" });
+    await page.getByRole("button", { name: "Writing", exact: true }).click();
+    const note = page.getByRole("textbox", { name: "Your writing" });
     await note.fill("Telos: what a thing is for. Useful for asking what my work is for.");
     await page.waitForTimeout(400);
     await page.reload();
-    await page.getByRole("button", { name: "Understanding" }).click();
-    await expect(page.getByRole("textbox", { name: "Understanding note" })).toHaveValue(/what my work is for/);
+    await page.getByRole("button", { name: "Writing", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Your writing" })).toHaveValue(/what my work is for/);
   });
 
   test("a topic can sit under two bigger topics", async ({ page }) => {

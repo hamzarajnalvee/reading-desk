@@ -1,7 +1,8 @@
 // A branch in a card's margin. One component with a variant per kind; click a source to open it as the next card, anything else to open it over the workspace.
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent } from "react";
 import { ArrowLeftRight, ArrowRight, ExternalLink, MessageCircle, Pencil, RotateCw, Sparkles, Trash2 } from "lucide-react";
-import type { Depth, TreeNode } from "../../data/types";
+import type { Depth, Track, TreeNode } from "../../data/types";
+import { TRACK_LABEL, otherTrack } from "../../lib/tracks";
 import { useStore } from "../../store/useStore";
 import { Markdown, Segmented, SourceChip } from "../ui";
 import { siteName } from "../../lib/clipboard";
@@ -12,6 +13,8 @@ export const KIND_LABEL: Record<TreeNode["kind"], string> = { source: "Source", 
 
 interface Props {
   node: TreeNode;
+  /** Essay or rabbit hole, as worked out for this branch. */
+  track?: Track | null;
   top?: number;
   /** Which margin it's in: it grows away from the page when you stretch it. */
   side?: "left" | "right";
@@ -35,7 +38,7 @@ interface Props {
   onResize: () => void;
 }
 
-export function BranchCard({ node: n, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
+export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
   const { updateNode, removeNode } = useStore.getState();
   const doc = useStore((s) => (n.docId ? s.docs[n.docId] : undefined));
   const elRef = useRef<HTMLDivElement | null>(null);
@@ -131,6 +134,9 @@ export function BranchCard({ node: n, top, side = "right", inline, editing, lock
         {n.anchors.length > 1 && <span className="count">{n.anchors.length} links</span>}
         {childCount > 0 && <span className="count">{plural(childCount, "branch", "branches")}</span>}
         {unattached && <span className="count">Not linked</span>}
+        {track && (locked ? <span className={`track-chip t-${track}`}>{TRACK_LABEL[track]}</span>
+          : <button className={`track-chip t-${track}`} data-testid="track-chip" title={`Switch to ${TRACK_LABEL[otherTrack(track)]}`} aria-label={`${TRACK_LABEL[track]}. Switch to ${TRACK_LABEL[otherTrack(track)]}`}
+              onClick={() => updateNode(n.id, { track: otherTrack(track) })}>{TRACK_LABEL[track]}</button>)}
       </div>
 
       {n.kind === "source" && (

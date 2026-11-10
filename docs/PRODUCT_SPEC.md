@@ -19,7 +19,8 @@ Consumer-grade and calm, with a research quality. Apple-level polish: few visibl
 | **Trail** | The chain of cards you have open (e.g. Stripe → How card payments work → PCI DSS → 3D Secure). Trails are saved automatically and can be resumed. |
 | **Map** | The zoomed-out view of a tree: every branch as a node, joined by the passages that led to it. |
 | **Topic** | A label you give trees. Topics can sit under several bigger topics: *Syllogistic method* → *Logic* → both *Philosophy* and *Computer Science*. |
-| **Understanding** | A living note per tree: what you understood, in your words. Claude can draft one only when asked. |
+| **Writing** | A living note per tree (stored as `understanding`): your essay or what you understood, in your words. Select a passage and press Cite (C) to link it; links open the passage. Claude can draft one only when asked. |
+| **Track** | Every branch is **Essay** or **Rabbit hole**. Rule: definitions, Wikipedia and Claude explanations (and what grows from them) are rabbit holes; everything else is essay material. One click on a card's chip switches it; **Sort with Claude** (Notebook) suggests tracks, applied only when you accept. |
 | **Highlight** | A mark on a passage with nothing attached. |
 
 ## Screens
@@ -27,7 +28,8 @@ Consumer-grade and calm, with a research quality. Apple-level polish: few visibl
 Your trees as cards: a small silhouette of each tree's shape, the seed's title, topics, branch and source counts, last opened, and Resume. "New tree" starts from a file, pasted text, a web address, or an idea you write.
 
 ### Tree (`/tree/:id`)
-- **Header:** tree title (editable), topic chips (add, remove, create), Cards | Map switch, Trails (resume a previous chain), Understanding, Ask Claude.
+- **Header:** tree title (editable), topic chips (add, remove, create), Read | Map | Notebook switch, Add (a paper, article, excerpt, note or definition straight onto the seed, no passage needed; it waits unlinked in the seed's margin until you thread it to a sentence), Trails (resume a previous chain), Writing, Ask Claude.
+- **Notebook:** one page with your writing, notes, summaries and highlights, grouped by Essay · Rabbit holes or by source. Each quote opens its passage. The Map can also show only one track.
 - **Read view:** the trail as sliding cards. Each card is a reading surface centred on its own. The **Branches** button (top right of the card, with a count) opens a margin rail on its right showing that card's branches, level with their passages and joined by thin curved threads.
   - **Two margins:** with branches showing, the page stays in the centre with a margin on each side. A branch goes to the margin nearest its passage (left half of the page → left), and **Move** swaps sides. On narrower cards every branch sits on the right.
   - **Resizable branch cards:** drag a card's outer bottom corner; it keeps the size you give it.

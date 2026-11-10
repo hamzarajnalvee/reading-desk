@@ -68,6 +68,8 @@ export interface Source {
 
 export type NodeKind = "source" | "note" | "definition" | "explanation" | "clipping";
 export type Depth = "educational" | "technical" | "both";
+/** What a branch is for: material for the essay you're writing, or a rabbit hole you followed to learn. */
+export type Track = "essay" | "rabbit";
 
 /** Anything in a tree: the seed, or a branch that grew from a passage in its parent. */
 export interface TreeNode {
@@ -101,6 +103,8 @@ export interface TreeNode {
   question?: string;
   /** Notes: a summary of the section (or whole source) it's anchored to. Listed with the source's contents. */
   summary?: boolean;
+  /** Essay or rabbit hole, when you (or a suggestion you accepted) set it. Unset means the rule in lib/tracks.ts decides. */
+  track?: Track;
   /** Transient states, never persisted. */
   pending?: boolean;
   error?: string;

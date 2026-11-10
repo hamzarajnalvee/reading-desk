@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { ASK_SYSTEM, EXPLAIN_SYSTEM, SUMMARY_SYSTEM } from "./prompts.js";
+import { ASK_SYSTEM, EXPLAIN_SYSTEM, SORT_SYSTEM, SUMMARY_SYSTEM } from "./prompts.js";
 import { mockAsk, mockExplain, mockSummary } from "./mock.js";
 import { extractArticle } from "./extract.js";
 import { requireSession } from "./auth.js";
@@ -50,6 +50,26 @@ app.post("/api/summarise", signedIn, async (req, res) => {
   const { title = "", material = "" } = req.body as Record<string, string>;
   if (!client) { res.type("text/plain").send(mockSummary()); return; }
   await streamText(res, SUMMARY_SYSTEM, [{ role: "user", content: `Tree: ${title}\n\n${material.slice(0, 120_000)}` }], 900);
+});
+
+/** Suggest essay or rabbit hole for each branch. Body: { statement, items: [{ id, kind, title, text }] }. Answer: { tracks: { id: track } } */
+app.post("/api/sort", signedIn, async (req, res) => {
+  const { statement = "", items = [] } = req.body as { statement?: string; items?: { id: string; kind: string; title: string; text?: string }[] };
+  const list = items.slice(0, 200);
+  const known = new Set(list.map((i) => i.id));
+  if (!client) {
+    // Demo mode: the same plain rule the app uses, so the flow can be tried without a key.
+    res.json({ tracks: Object.fromEntries(list.map((i) => [i.id, i.kind === "definition" || i.kind === "explanation" ? "rabbit" : "essay"])), demo: true });
+    return;
+  }
+  const lines = list.map((i) => `${i.id} [${i.kind}] ${i.title.slice(0, 120)}${i.text ? ` — ${i.text.replace(/\s+/g, " ").slice(0, 240)}` : ""}`).join("\n");
+  try {
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 2000, system: SORT_SYSTEM, messages: [{ role: "user", content: `Statement: ${statement.slice(0, 600)}\n\nBranches:\n${lines}` }] });
+    const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+    const tracks: Record<string, string> = {};
+    for (const m of text.matchAll(/^\s*(\S+)\s+(essay|rabbit)\b/gim)) if (known.has(m[1])) tracks[m[1]] = m[2].toLowerCase();
+    res.json({ tracks });
+  } catch (e) { res.status(502).json({ error: `Claude couldn't sort the branches: ${(e as Error).message}` }); }
 });
 
 /** Dictionary definition (no AI): Wiktionary first for single words, then Wikipedia's summary. `source=wikipedia` skips Wiktionary. */

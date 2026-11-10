@@ -14,6 +14,11 @@ export const EXPLAIN_SYSTEM = {
   both: `Explain the passage in two short parts: first **In plain terms** (2-3 sentences for a non-specialist), then **Precisely** (2-4 sentences with the correct technical detail). Markdown. No LaTeX.`,
 };
 
+export const SORT_SYSTEM = `You help a reader sort the branches of a reading tree into two tracks.
+- essay: material for the essay or argument named in the tree's statement (evidence, examples, counterpoints, the reader's own notes on it).
+- rabbit: a detour followed to learn something (a definition, background, a tangent) that the essay itself won't use directly.
+Answer with one line per branch and nothing else, exactly in the form: <id> essay   or   <id> rabbit`;
+
 export const SUMMARY_SYSTEM = `Draft an "understanding" note for a reader from the trail of cards and notes they collected.
 Write in the first person, as their own notes: what they now understand, the key ideas and how they connect, and what is still open.
 Plain, clear prose in short paragraphs, under 250 words. Use only what is in the material; say where it is thin. No headings, no LaTeX.`;

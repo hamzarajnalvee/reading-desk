@@ -1,7 +1,7 @@
-// A tree: the trail as sliding cards, or the whole tree as a map. Understanding and Ask Claude open as drawers.
-import { useEffect, useMemo } from "react";
+// A tree: the trail as sliding cards (Read), the whole tree (Map), or everything you wrote (Notebook). Writing and Ask Claude open as drawers.
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { BookText, Lock, Maximize2, MessageCircle, Minimize2, Sparkles } from "lucide-react";
+import { Lock, Maximize2, MessageCircle, Minimize2, PenLine, Plus, Sparkles } from "lucide-react";
 import type { Anchor, TreeNode } from "../data/types";
 import { useStore, useTree } from "../store/useStore";
 import { CardStack } from "../components/tree/CardStack";
@@ -13,6 +13,9 @@ import { TreeMenu } from "../components/tree/TreeMenu";
 import { CoachMarks } from "../components/CoachMarks";
 import { BranchPopup } from "../components/tree/BranchPopup";
 import { ReaderPopup } from "../components/tree/ReaderPopup";
+import { NotebookView } from "../components/tree/NotebookView";
+import { AddDialog } from "../components/tree/AddDialog";
+import { toast } from "../lib/toast";
 import { EmptyState, IconButton, Segmented } from "../components/ui";
 import { plural } from "../lib/util";
 import { useMedia } from "../lib/hooks";
@@ -27,7 +30,9 @@ export function TreeScreen() {
   const label = useTrailLabel();
   const compact = useMedia("(max-width: 760px)");
 
-  const view = params.get("view") === "map" ? "map" : "cards";
+  const [adding, setAdding] = useState(false);
+  const rawView = params.get("view");
+  const view: "cards" | "map" | "notebook" = rawView === "map" || rawView === "notebook" ? rawView : "cards";
   const path = useMemo(() => {
     if (!tree) return [];
     const raw = (params.get("path") || "").split(",").filter((id) => nodes[id]?.treeId === tree.id);
@@ -46,7 +51,7 @@ export function TreeScreen() {
 
   if (!tree) return <div className="screen-pad"><EmptyState title="Tree not found" body="It may have been deleted." action={<Link className="btn btn-primary" to="/">Your trees</Link>} /></div>;
 
-  const go = (p: string[], v: "cards" | "map" = "cards") => setParams(v === "map" ? { path: p.join(","), view: "map" } : { path: p.join(",") });
+  const go = (p: string[], v: "cards" | "map" | "notebook" = "cards") => setParams(v === "cards" ? { path: p.join(",") } : { path: p.join(","), view: v });
   const last = tree.trails[0];
   const showResume = view === "cards" && path.length === 1 && last && last.nodeIds.length > 1 && last.nodeIds.every((id) => nodes[id]);
   /** The trail from the seed to a node, so it can be opened as the last card. */
@@ -65,6 +70,19 @@ export function TreeScreen() {
     if (n && n.kind === "note" && !n.body?.trim() && !Object.values(useStore.getState().nodes).some((c) => c.parentId === n.id)) useStore.getState().removeNode(n.id);
     setUI({ popup: null });
   };
+  /** Open the card holding a passage and scroll to it (from a link in your writing, or the notebook). */
+  const openPassage = (nodeId: string, blockId: string) => {
+    if (!useStore.getState().nodes[nodeId]) { toast("That passage's branch was deleted."); return; }
+    setUI({ jumpTo: { nodeId, blockId } });
+    go(trailTo(nodeId));
+  };
+  /** Something added straight to the seed: sources open as the next card; the rest wait in the seed's margin. */
+  const added = (id: string) => {
+    setAdding(false);
+    const n = useStore.getState().nodes[id];
+    if (n?.kind === "source") go(trailTo(id));
+    else { setUI({ branchesOpen: true }); go([tree.seedId]); }
+  };
   const pin = (a: Anchor, text: string) => {
     const parent = nodes[a.docId];
     if (!parent) return;
@@ -80,9 +98,10 @@ export function TreeScreen() {
           <div className="th-meta"><span className="muted small">{plural(count, "branch", "branches")}</span>{tree.locked && <span className="chip static locked-chip"><Lock size={11} aria-hidden />Locked</span>}<TopicChips tree={tree} /></div>
         </div>
         <div className="th-actions">
-          <Segmented label="View" value={view} onChange={(v) => go(path, v)} options={[{ value: "cards", label: "Read" }, { value: "map", label: "Map" }]} />
+          <Segmented label="View" value={view} onChange={(v) => go(path, v)} options={[{ value: "cards", label: "Read" }, { value: "map", label: "Map" }, { value: "notebook", label: "Notebook" }]} />
+          {!tree.locked && <button className="btn btn-ghost btn-sm" data-testid="add-to-tree" onClick={() => setAdding(true)} title="Add a paper, article, excerpt or definition to the seed"><Plus size={14} /><span>Add</span></button>}
           {!compact && <TrailsMenu tree={tree} onOpen={(ids) => go(ids)} />}
-          <button className={`btn btn-ghost btn-sm${ui.drawer === "understanding" ? " on" : ""}`} data-coach="understanding" onClick={() => setUI({ drawer: ui.drawer === "understanding" ? null : "understanding" })}><BookText size={14} /><span>Understanding</span></button>
+          <button className={`btn btn-ghost btn-sm${ui.drawer === "understanding" ? " on" : ""}`} data-coach="understanding" aria-label="Writing" onClick={() => setUI({ drawer: ui.drawer === "understanding" ? null : "understanding" })}><PenLine size={14} /><span>Writing</span></button>
           <button className={`btn btn-ghost btn-sm${ui.drawer === "ask" ? " on" : ""}`} onClick={() => setUI({ drawer: ui.drawer === "ask" ? null : "ask" })} title="Ask Claude about this trail"><Sparkles size={14} /><span>Ask</span></button>
           <TreeMenu tree={tree} branchCount={count - 1} />
           {!compact && <IconButton label={ui.focus ? "Exit focus" : "Focus"} onClick={() => setUI({ focus: !ui.focus, drawer: null })}>{ui.focus ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</IconButton>}
@@ -106,8 +125,10 @@ export function TreeScreen() {
       )}
 
       <div className="tree-body">
-        {view === "map" ? <TreeMap tree={tree} path={path} onOpenPath={(p) => go(p)} /> : <CardStack tree={tree} path={path} onPath={(p) => go(p)} />}
-        {ui.drawer === "understanding" && <UnderstandingDrawer tree={tree} onClose={() => setUI({ drawer: null })} />}
+        {view === "map" ? <TreeMap tree={tree} path={path} onOpenPath={(p) => go(p)} />
+          : view === "notebook" ? <NotebookView tree={tree} onOpenPassage={openPassage} onOpenWriting={() => setUI({ drawer: "understanding", focus: false })} />
+          : <CardStack tree={tree} path={path} onPath={(p) => go(p)} />}
+        {ui.drawer === "understanding" && <UnderstandingDrawer tree={tree} onClose={() => setUI({ drawer: null })} onOpenPassage={openPassage} />}
         {ui.reader && ui.reader.treeId === tree.id && (
           <ReaderPopup {...ui.reader} locked={!!tree.locked} onClose={() => setUI({ reader: null })} onKept={(id) => { setUI({ reader: null }); go(trailTo(id)); }} />
         )}
@@ -118,6 +139,7 @@ export function TreeScreen() {
         {ui.drawer === "ask" && <AskDrawer tree={tree} path={path} onClose={() => setUI({ drawer: null })} onPin={tree.locked ? undefined : pin} />}
       </div>
       {!compact && view === "cards" && <CoachMarks />}
+      {adding && <AddDialog mode="branch" anchor={null} treeId={tree.id} parentId={tree.seedId} onClose={() => setAdding(false)} onCreated={added} />}
     </div>
   );
 }

@@ -46,6 +46,7 @@ export function md(src: string): string {
     const hold = (html: string) => `\u0000${keep.push(html) - 1}\u0000`;
     return s
       .replace(/`([^`]+)`/g, (_, c) => hold(`<code>${c}</code>`))
+      .replace(/\[([^\]]+)\]\((#cite:[\w-]+\/[\w-]+)\)/g, (_, t, u) => hold(`<a href="${u}" class="cite">${t}</a>`))
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => hold(`<a href="${u}" target="_blank" rel="noopener">${t}</a>`))
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")

@@ -1,7 +1,7 @@
 // Frosted capsule shown when text is selected in a card. ✦ marks the only actions that call Claude.
-import { BookOpen, GitBranch, Globe, Highlighter, MessageCircle, Sparkles, StickyNote } from "lucide-react";
+import { BookOpen, GitBranch, PenLine, Globe, Highlighter, MessageCircle, Sparkles, StickyNote } from "lucide-react";
 
-export type SelectionAction = "highlight" | "note" | "define" | "wikipedia" | "branch" | "explain" | "ask";
+export type SelectionAction = "highlight" | "note" | "define" | "wikipedia" | "branch" | "cite" | "explain" | "ask";
 
 const ITEMS: { id: SelectionAction; label: string; key: string; icon: JSX.Element; claude?: boolean }[] = [
   { id: "highlight", label: "Highlight", key: "H", icon: <Highlighter size={14} /> },
@@ -9,6 +9,7 @@ const ITEMS: { id: SelectionAction; label: string; key: string; icon: JSX.Elemen
   { id: "define", label: "Define", key: "D", icon: <BookOpen size={14} /> },
   { id: "wikipedia", label: "Wikipedia", key: "W", icon: <Globe size={14} /> },
   { id: "branch", label: "Branch", key: "B", icon: <GitBranch size={14} /> },
+  { id: "cite", label: "Cite", key: "C", icon: <PenLine size={14} /> },
   { id: "explain", label: "Explain", key: "E", icon: <Sparkles size={14} />, claude: true },
   { id: "ask", label: "Ask", key: "A", icon: <MessageCircle size={14} />, claude: true },
 ];
