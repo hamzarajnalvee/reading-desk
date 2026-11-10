@@ -48,8 +48,28 @@ export const citeClick = (onOpenPassage: (nodeId: string, blockId: string) => vo
  */
 export function appendExcerpt(text: string, a: Anchor, from: { title: string; site?: string }): string {
   const t = (text || "").replace(/\s+$/, "");
+  return (t ? t + "\n\n" : "") + excerptMarkdown(a, from) + "\n\n";
+}
+
+/** The quotation itself, as Markdown, with no space around it. */
+export function excerptMarkdown(a: Anchor, from: { title: string; site?: string }): string {
   const quote = a.quote.replace(/\s+/g, " ").trim();
   const title = from.title.replace(/[[\]*_]/g, "").trim() || "Source";
   const where = [from.site?.replace(/[*_]/g, ""), a.page > 0 ? `p. ${a.page}` : ""].filter(Boolean).join(", ");
-  return (t ? t + "\n\n" : "") + `> ${quote}\n> — *from [${title}](#cite:${a.docId}/${a.blockId})${where ? `, ${where}` : ""}*\n\n`;
+  return `> ${quote}\n> — *from [${title}](#cite:${a.docId}/${a.blockId})${where ? `, ${where}` : ""}*`;
+}
+
+const QUOTE_RE = /^>\s?([\s\S]*?)\n>\s?— \*from \[([^\]]*)\]\(#cite:([^/\s)]+)\/([^\s)]+)\)([^*]*)\*\s*$/;
+/**
+ * One paragraph of your writing read as a quotation, for showing on the page: the words in quotes, then the
+ * italic source line, with the title linked back to the passage. Null if the paragraph isn't a quotation.
+ */
+export function quoteBlock(raw: string): { text: string; attrib: number; link: { start: number; end: number; href: string } } | null {
+  const m = raw.trim().match(QUOTE_RE);
+  if (!m) return null;
+  const words = `“${m[1].replace(/\n>\s?/g, " ").replace(/\s+/g, " ").trim()}”`;
+  const attrib = words.length + 1;
+  const lead = "— from ";
+  const start = attrib + lead.length, end = start + m[2].length;
+  return { text: `${words}\n${lead}${m[2]}${m[5]}`, attrib, link: { start, end, href: `#cite:${m[3]}/${m[4]}` } };
 }

@@ -1,5 +1,6 @@
 // Readable content for any card, and helpers for walking a tree.
 import type { Block, Content, Doc, TreeNode } from "../data/types";
+import { quoteBlock } from "./writing";
 
 /** Split a Markdown body into blocks. Block ids are stable for a given paragraph position. */
 export function bodyBlocks(nodeId: string, body: string): Block[] {
@@ -9,6 +10,9 @@ export function bodyBlocks(nodeId: string, body: string): Block[] {
     .map((s) => s.trim())
     .filter(Boolean)
     .map((s, i) => {
+      // A quotation you added from a source keeps its link back to the passage, and its source line.
+      const q = quoteBlock(s);
+      if (q) return { id: `${nodeId}-p${i + 1}`, kind: "p", text: q.text, page: 1, quote: true, attrib: q.attrib, links: [q.link] } as Block;
       const h = s.match(/^#{1,6}\s+(.*)$/s);
       const raw = (h ? h[1] : s).replace(/\s+/g, " ");
       // Cards show plain text (offsets are measured on it), so drop Markdown emphasis markers.

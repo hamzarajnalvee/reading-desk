@@ -4,12 +4,11 @@ import { ArrowLeftRight, ArrowRight, BookOpen, ExternalLink, PenLine, MessageCir
 import type { Anchor, Depth, Track, TreeNode } from "../../data/types";
 import { TRACK_LABEL, otherTrack, trackOf } from "../../lib/tracks";
 import { selectionAnchor } from "../../lib/anchors";
-import { appendExcerpt } from "../../lib/writing";
 import { toast } from "../../lib/toast";
 import { useStore } from "../../store/useStore";
 import { Markdown, Segmented, SourceChip } from "../ui";
 import { siteName } from "../../lib/clipboard";
-import { explainNode, loadUrl, noteTitle, runAsk, runExplain } from "../../lib/actions";
+import { quoteToEssay, explainNode, loadUrl, noteTitle, runAsk, runExplain } from "../../lib/actions";
 import { clamp, plural } from "../../lib/util";
 
 export const KIND_LABEL: Record<TreeNode["kind"], string> = { source: "Source", note: "Note", definition: "Definition", explanation: "Claude", clipping: "Clipping" };
@@ -65,15 +64,11 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
   /** Send the selected words to your writing as a quotation, linked to exactly where they are in this source. */
   const citeExcerpt = () => {
     if (!excerpt || !doc) return;
-    const t = useStore.getState().trees.find((x) => x.id === n.treeId);
-    const st = useStore.getState();
-    st.updateTree(n.treeId, { understanding: appendExcerpt(t?.understanding || "", excerpt.anchor, { title: doc.title, site: doc.site }) });
-    // Keep the words marked in the source, and file the source with the essay: you're quoting it.
-    st.addHighlight(n.id, excerpt.anchor);
-    if (trackOf(n, st.nodes) !== "essay") updateNode(n.id, { track: "essay" });
-    st.setUI({ drawer: "understanding", focus: false });
+    const where = quoteToEssay(n.treeId, excerpt.anchor, { title: doc.title, site: doc.site });
+    if (trackOf(n, useStore.getState().nodes) !== "essay") updateNode(n.id, { track: "essay" });
+    if (where === "writing") useStore.getState().setUI({ drawer: "understanding", focus: false });
     window.getSelection()?.removeAllRanges(); setExcerpt(null);
-    toast("Added to your writing and filed under Essay");
+    toast(where === "root" ? "Quoted at the end of your essay and filed under Essay" : "Quoted in your writing and filed under Essay");
   };
   const elRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -217,7 +212,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
           )}
           {excerpt && (
             <div className="excerpt-bar" style={{ left: excerpt.x, top: Math.max(4, excerpt.y - 42) }} onMouseDown={(e) => e.preventDefault()}>
-              <button onClick={citeExcerpt} data-testid="excerpt-cite"><PenLine size={13} />Add to writing</button>
+              <button onClick={citeExcerpt} data-testid="excerpt-cite"><PenLine size={13} />Quote in essay</button>
             </div>
           )}
         </>

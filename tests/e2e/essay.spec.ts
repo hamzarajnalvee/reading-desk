@@ -38,11 +38,14 @@ test.describe("Essay workspace", () => {
     });
     await branch.getByTestId("article").dispatchEvent("mouseup");
     await branch.getByTestId("excerpt-cite").click();
-    await expect(page.getByRole("textbox", { name: "Your writing" })).toHaveValue(/> Painting a wall\n> — \*from \[The case for the trivial\]\(#cite:[^)]+\), p\. 1\*/);
-    await page.getByTestId("cite").first().click();
+    // The quote lands at the end of the root (the essay itself): the words, then where they came from in italics.
+    const quote = card(page, "n-telos").locator(".blk-quote").last();
+    await expect(quote).toContainText("“Painting a wall”");
+    await expect(quote.locator("mark.k-attrib").first()).toContainText("— from");
+    await expect(quote).toContainText("The case for the trivial, p. 1");
+    // Its title opens the source at the quoted passage.
+    await quote.locator('mark[data-ann*="link|"]').click();
     await expect(page.getByTestId("card")).toHaveCount(2);
-    // The article folds away from its own button.
-    await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.locator(".trail-bar button").first().click();
     await expect(page.getByTestId("card")).toHaveCount(1);
     await branch.getByRole("button", { name: "Close article" }).focus();
@@ -110,15 +113,17 @@ test.describe("Essay workspace", () => {
     await expect(page.locator('[data-testid="map-node"][data-node="n-telos-q"]')).toHaveClass(/dim/);
   });
 
-  test("Cite links a passage in your writing, and the link opens it", async ({ page }) => {
+  test("Quote puts a passage in your writing with its source, and the link opens it", async ({ page }) => {
     await openTree(page, "tr-payments");
     await showBranches(page);
     await card(page, "n-stripe").locator('[data-branch="n-primer"]').click();
     const primer = card(page, "n-primer");
     await selectPhrase(primer, "interchange fee");
-    await primer.getByTestId("selection-toolbar").getByRole("button", { name: "Cite" }).click();
+    await primer.getByTestId("selection-toolbar").getByRole("button", { name: "Quote" }).click();
     const writing = page.getByTestId("understanding");
-    await expect(writing.getByRole("textbox", { name: "Your writing" })).toHaveValue(/\[“interchange fee”\]\(#cite:n-primer\//);
+    // The passage arrives as a quotation, with its source in italics, linked back to it.
+    await expect(writing.getByRole("textbox", { name: "Your writing" })).toHaveValue(/> interchange fee\n> — \*from \[[^\]]+\]\(#cite:n-primer\/[^)]+\), p\. \d+\*/);
+    await expect(primer.locator("mark", { hasText: "interchange fee" }).first()).toBeVisible();
     // Go back to the seed, then follow the link: the card opens again.
     await page.locator(".trail-bar button").first().click();
     await expect(page.getByTestId("card")).toHaveCount(1);

@@ -13,12 +13,12 @@ import { contentsLinks, contentsOf, currentEntry } from "../../lib/contents";
 import { markFor, reanchor, selectionAnchor, sentenceAnchorAt } from "../../lib/anchors";
 import { readTransfer } from "../../lib/clipboard";
 import { bodyBlocks, bodyOffset, contentOf } from "../../lib/content";
-import { branchAsk, branchDefinition, branchExplanation, branchWikipedia, loadUrl, noteTitle } from "../../lib/actions";
+import { quoteToEssay, branchAsk, branchDefinition, branchExplanation, branchWikipedia, loadUrl, noteTitle } from "../../lib/actions";
 import { toast } from "../../lib/toast";
 import { clamp, plural } from "../../lib/util";
 import { isTyping } from "../../lib/hooks";
 import { trackOf } from "../../lib/tracks";
-import { appendCite } from "../../lib/writing";
+import { parseCite } from "../../lib/writing";
 
 /** Space between a margin and the reading column beyond it. */
 const COL_GAP = 24;
@@ -63,6 +63,8 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const highlights = useMemo(() => allHighlights.filter((h) => h.nodeId === node.id), [allHighlights, node.id]);
   const marks: MarkSpec[] = useMemo(() => {
     const links: MarkSpec[] = [];
+    // A quotation's source line is set in italics.
+    content.blocks.forEach((b) => { if (b.attrib != null) links.push({ id: `attrib|${b.id}`, kind: "attrib", anchors: [{ docId: node.id, blockId: b.id, start: b.attrib, end: b.text.length, quote: b.text.slice(b.attrib), page: b.page }] }); });
     content.blocks.forEach((b) => b.links?.forEach((l) => links.push({ id: `link|${b.id}|${l.start}|${l.href}`, kind: "weblink", anchors: [{ docId: node.id, blockId: b.id, start: l.start, end: l.end, quote: b.text.slice(l.start, l.end), page: b.page }] })));
     // The printed contents page: each title it lists jumps to that part.
     tocLinks.forEach((l) => {
@@ -162,8 +164,6 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
         ys.push((r.top - cr.top + Math.min(r.height, 26) / 2) / z);
       }
       if (y == null && c.marginY != null) y = c.marginY;
-      // A card you dragged up or down sits that far from its passage.
-      if (y != null && c.nudge?.dy && c.id !== readingBeside) y += c.nudge.dy;
       // While you type on the page its links aren't drawn, so linked cards keep the place they had.
       if (y == null && writing && layoutRef.current.tops[c.id] != null) y = layoutRef.current.tops[c.id] + 6;
       return { c, y, ys: writing ? [] : ys, side: sideOf(c, leftOn) };
@@ -192,17 +192,19 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
       const items = all.filter((o) => o.side === side && o !== col);
       // A narrow card hides the left margin; its branches move to the right one, so there's nothing to lay out here.
       if (!items.length || (side === "left" && !ml)) continue;
-      const stack = () => { let floor = 0; for (const o of items) { const t = Math.max(o.y - 6, floor); tops[o.c.id] = t; floor = t + height(o.c.id) + GAP; } };
+      // A card you dragged up or down moves by that much from wherever it would otherwise sit; the ones below make room.
+      const dy = (o: { c: TreeNode }) => o.c.nudge?.dy || 0;
+      const stack = () => { let floor = 0; for (const o of items) { const t = Math.max(0, Math.max(o.y - 6, floor) + dy(o)); tops[o.c.id] = t; floor = Math.max(floor, t + height(o.c.id) + GAP); } };
       // The branch you're working on sits right beside its passage; the others move out of its way.
       const fi = focusId ? items.findIndex((o) => o.c.id === focusId) : -1;
       if (fi < 0) stack();
       else {
-        const f = items[fi], ft = Math.max(f.y - 6, 0);
+        const f = items[fi], ft = Math.max(f.y - 6 + dy(f), 0);
         tops[f.c.id] = ft;
         let floor = ft + height(f.c.id) + GAP;
-        for (const o of items.slice(fi + 1)) { const t = Math.max(o.y - 6, floor); tops[o.c.id] = t; floor = t + height(o.c.id) + GAP; }
+        for (const o of items.slice(fi + 1)) { const t = Math.max(0, Math.max(o.y - 6, floor) + dy(o)); tops[o.c.id] = t; floor = Math.max(floor, t + height(o.c.id) + GAP); }
         let ceil = ft - GAP, fits = true;
-        for (const o of items.slice(0, fi).reverse()) { const t = Math.min(o.y - 6, ceil - height(o.c.id)); if (t < 0) { fits = false; break; } tops[o.c.id] = t; ceil = t - GAP; }
+        for (const o of items.slice(0, fi).reverse()) { const t = Math.min(o.y - 6 + dy(o), ceil - height(o.c.id)); if (t < 0) { fits = false; break; } tops[o.c.id] = t; ceil = t - GAP; }
         if (!fits) stack();
       }
       // Threads leave the page from the edge nearest the card's margin.
@@ -284,11 +286,9 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
       case "ask": place(branchAsk(tree.id, node.id, an)); break;
       case "branch": setBranchAt(an); break;
       case "cite": {
-        // Link the passage at the end of your writing, and show the writing so you can carry on from it.
-        const t = useStore.getState().trees.find((x) => x.id === tree.id);
-        useStore.getState().updateTree(tree.id, { understanding: appendCite(t?.understanding || "", an) });
-        setUI({ drawer: "understanding", focus: false });
-        toast("Linked in your writing");
+        const where = quoteToEssay(tree.id, an, { title: content.title, site: doc?.site });
+        if (where === "writing") setUI({ drawer: "understanding", focus: false });
+        toast(where === "root" ? "Quoted at the end of your essay, with its source" : "Quoted in your writing, with its source");
         break;
       }
     }
@@ -417,6 +417,9 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     if (link) {
       const [, blockId, start, ...rest] = link.split("|");
       const href = rest.join("|");
+      // A quotation's source: open that source at the quoted passage.
+      const cite = parseCite(href);
+      if (cite) { setUI({ goPassage: cite }); return; }
       if (href.startsWith("#")) { jumpTo(href.slice(1), "start"); return; }
       if (e.metaKey || e.ctrlKey || locked) { if (locked && children.some((c) => c.url === href)) { onOpen(children.find((c) => c.url === href)!.id); return; } window.open(href, "_blank", "noopener"); return; }
       const b = content.blocks.find((x) => x.id === blockId)!;

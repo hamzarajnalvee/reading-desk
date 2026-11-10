@@ -500,3 +500,9 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .page-edge:hover { background: var(--accent-soft); }
 .page-moving > .page-grip { cursor: grabbing; }
 @media (prefers-reduced-motion: reduce) { .page-grip, .page-edge { transition: none; } }
+
+/* A quotation in your essay: set off from your own words, with its source in italics, the title linking back. */
+.blk.blk-quote { border-left: 2px solid var(--accent-line); padding-left: 18px; margin-left: 2px; color: var(--ink-2); }
+mark.mk.k-attrib { background: none; color: var(--ink-3); font-style: italic; font-size: 0.88em; }
+.blk.blk-quote { white-space: pre-line; }
+.blk-quote mark[data-ann*="link|"] { color: var(--link); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

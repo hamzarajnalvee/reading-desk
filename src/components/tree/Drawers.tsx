@@ -42,7 +42,7 @@ export function UnderstandingDrawer({ tree, onClose, onOpenPassage }: { tree: Tr
       <div className="drawer-head"><h2 className="serif">Writing</h2>
         <Segmented size="sm" label="Writing view" value={mode} onChange={setMode} options={[{ value: "write", label: "Write" }, { value: "read", label: "Read" }]} />
         <button className="icon-btn" aria-label="Close" onClick={onClose}><X size={16} /></button></div>
-      <p className="muted small drawer-sub">Your essay or thoughts, in your own words. To link a passage, select it and press Cite (C).</p>
+      <p className="muted small drawer-sub">Your essay or thoughts, in your own words. To quote a passage with its source, select it and press Quote (C).</p>
       {mode === "write" ? (
         <textarea className="understanding serif" value={tree.understanding} readOnly={tree.locked} onChange={(e) => updateTree(tree.id, { understanding: e.target.value })}
           placeholder="Your argument, the key ideas, how they connect, and what's still open…" aria-label="Your writing" />

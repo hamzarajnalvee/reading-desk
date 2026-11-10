@@ -19,7 +19,7 @@ Consumer-grade and calm, with a research quality. Apple-level polish: few visibl
 | **Trail** | The chain of cards you have open (e.g. Stripe → How card payments work → PCI DSS → 3D Secure). Trails are saved automatically and can be resumed. |
 | **Map** | The zoomed-out view of a tree: every branch as a node, joined by the passages that led to it. |
 | **Topic** | A label you give trees. Topics can sit under several bigger topics: *Syllogistic method* → *Logic* → both *Philosophy* and *Computer Science*. |
-| **Writing** | A living note per tree (stored as `understanding`): your essay or what you understood, in your words. Select a passage and press Cite (C) to link it; links open the passage. Claude can draft one only when asked. |
+| **Writing** | A living note per tree (stored as `understanding`): your essay or what you understood, in your words. Select a passage and press Quote (C), or Quote in essay inside an article: the words go to the end of the root (your essay) as a quotation with an italic source line linking back; if the root is a source, they go to Writing. Claude can draft one only when asked. |
 | **Track** | Every branch is **Essay** or **Rabbit hole**. Rule: definitions, Wikipedia and Claude explanations (and what grows from them) are rabbit holes; everything else is essay material. One click on a card's chip switches it; **Sort with Claude** (Notebook) suggests tracks, applied only when you accept. |
 | **Highlight** | A mark on a passage with nothing attached. |
 

@@ -55,7 +55,7 @@ export const DocumentSheet = memo(function DocumentSheet({ content, marks, hotId
         const Tag = b.kind === "h" ? "h2" : "p";
         return [
           pageMark,
-          <Tag key={b.id} id={`block-${b.id}`} data-block={b.id} className={`blk blk-${b.kind}${flashBlockId === b.id ? " flash" : ""}`}>
+          <Tag key={b.id} id={`block-${b.id}`} data-block={b.id} className={`blk blk-${b.kind}${b.quote ? " blk-quote" : ""}${flashBlockId === b.id ? " flash" : ""}`}>
             {segments(b, marks, hotId)}
           </Tag>,
         ];

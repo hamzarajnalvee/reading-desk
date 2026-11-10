@@ -4,6 +4,7 @@ import { useStore } from "../store/useStore";
 import { contentOf } from "./content";
 import { ask, defineTerm, explain, fetchAsDoc } from "./api";
 import { toast } from "./toast";
+import { appendExcerpt } from "./writing";
 
 const S = () => useStore.getState();
 const running = new Map<string, AbortController>();
@@ -141,4 +142,25 @@ export function addDefinition(treeId: string, parentId: string, term: string, ma
     else S().updateNode(id, { pending: false });
   });
   return id;
+}
+
+/**
+ * Quote a passage into the essay: the end of the tree's root, when the root is your own writing.
+ * (A tree grown from a PDF or web page has no root to write in, so the quote goes to the Writing panel.)
+ * The words stay highlighted where they came from, and a branch you quote is filed under Essay.
+ */
+export function quoteToEssay(treeId: string, a: Anchor, from: { title: string; site?: string }): "root" | "writing" {
+  const s = S();
+  const tree = s.trees.find((t) => t.id === treeId);
+  if (!tree) return "writing";
+  const root = s.nodes[tree.seedId];
+  s.addHighlight(a.docId, a);
+  const src = s.nodes[a.docId];
+  if (src?.parentId && src.track !== "essay" && (src.kind === "definition" || src.kind === "explanation" || src.track === "rabbit")) s.updateNode(src.id, { track: "essay" });
+  if (root?.kind === "note" && a.docId !== root.id) {
+    s.updateNode(root.id, { body: appendExcerpt(root.body || "", a, from).replace(/\s+$/, "") });
+    return "root";
+  }
+  s.updateTree(treeId, { understanding: appendExcerpt(tree.understanding || "", a, from) });
+  return "writing";
 }

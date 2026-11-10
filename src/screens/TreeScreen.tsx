@@ -49,6 +49,19 @@ export function TreeScreen() {
     return () => clearTimeout(t);
   }, [path.join(","), tree?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A card asked to open a passage (a quotation's source link on the page): open its trail and scroll to it.
+  useEffect(() => {
+    const g = ui.goPassage;
+    if (!g) return;
+    setUI({ goPassage: null });
+    const all = useStore.getState().nodes;
+    if (!all[g.nodeId]) { toast("That passage's branch was deleted."); return; }
+    const chain: string[] = [];
+    for (let n: TreeNode | undefined = all[g.nodeId]; n; n = n.parentId ? all[n.parentId] : undefined) chain.unshift(n.id);
+    setUI({ jumpTo: { nodeId: g.nodeId, blockId: g.blockId } });
+    setParams({ path: chain.join(",") });
+  }, [ui.goPassage]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!tree) return <div className="screen-pad"><EmptyState title="Tree not found" body="It may have been deleted." action={<Link className="btn btn-primary" to="/">Your trees</Link>} /></div>;
 
   const go = (p: string[], v: "cards" | "map" | "notebook" = "cards") => setParams(v === "cards" ? { path: p.join(",") } : { path: p.join(","), view: v });

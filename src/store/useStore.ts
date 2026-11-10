@@ -40,6 +40,8 @@ export interface UIState {
   popup: string | null;
   /** A passage to scroll to once its card is open (from a link in your writing or the notebook). Not saved. */
   jumpTo?: null | { nodeId: string; blockId: string };
+  /** A passage a card asked to open (e.g. the source of a quotation); the tree screen opens its trail. Not saved. */
+  goPassage?: null | { nodeId: string; blockId: string };
 }
 
 export interface Data {
@@ -245,7 +247,7 @@ export const useStore = create<Data & Actions>()(
       partialize: (s) => ({
         trees: s.trees, nodes: Object.fromEntries(Object.entries(s.nodes).map(([k, n]) => [k, { ...n, pending: undefined, error: undefined }])),
         docs: s.docs, topics: s.topics, highlights: s.highlights, chats: s.chats,
-        ui: { ...s.ui, paletteOpen: false, pendingQuote: null, pendingAsk: null, drawer: null, reader: null, popup: null, jumpTo: null },
+        ui: { ...s.ui, paletteOpen: false, pendingQuote: null, pendingAsk: null, drawer: null, reader: null, popup: null, jumpTo: null, goPassage: null },
       }),
     },
   ),

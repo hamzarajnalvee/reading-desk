@@ -9,7 +9,7 @@ const ITEMS: { id: SelectionAction; label: string; key: string; icon: JSX.Elemen
   { id: "define", label: "Define", key: "D", icon: <BookOpen size={14} /> },
   { id: "wikipedia", label: "Wikipedia", key: "W", icon: <Globe size={14} /> },
   { id: "branch", label: "Branch", key: "B", icon: <GitBranch size={14} /> },
-  { id: "cite", label: "Cite", key: "C", icon: <PenLine size={14} /> },
+  { id: "cite", label: "Quote", key: "C", icon: <PenLine size={14} /> },
   { id: "explain", label: "Explain", key: "E", icon: <Sparkles size={14} />, claude: true },
   { id: "ask", label: "Ask", key: "A", icon: <MessageCircle size={14} />, claude: true },
 ];

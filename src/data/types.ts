@@ -12,6 +12,9 @@ export interface Block {
   label?: string;
   /** Hyperlinks inside the block (character ranges), which can be followed as branches. */
   links?: { start: number; end: number; href: string }[];
+  /** A quotation you added to your writing; `attrib` is where its italic source line starts in `text`. */
+  quote?: boolean;
+  attrib?: number;
 }
 
 /** One entry in a source's table of contents, pointing at the block where that part begins. */
