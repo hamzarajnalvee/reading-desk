@@ -1,18 +1,20 @@
-// A branch in a card's margin. One component with a variant per kind; click it to open it as the next card.
+// A branch in a card's margin. One component with a variant per kind; click a source to open it as the next card, anything else to open it over the workspace.
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent } from "react";
-import { ArrowRight, ExternalLink, MessageCircle, Pencil, RotateCw, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, ExternalLink, MessageCircle, Pencil, RotateCw, Sparkles, Trash2 } from "lucide-react";
 import type { Depth, TreeNode } from "../../data/types";
 import { useStore } from "../../store/useStore";
 import { Markdown, Segmented, SourceChip } from "../ui";
 import { siteName } from "../../lib/clipboard";
-import { explainNode, loadUrl, noteTitle, runExplain } from "../../lib/actions";
-import { plural } from "../../lib/util";
+import { explainNode, loadUrl, noteTitle, runAsk, runExplain } from "../../lib/actions";
+import { clamp, plural } from "../../lib/util";
 
 export const KIND_LABEL: Record<TreeNode["kind"], string> = { source: "Source", note: "Note", definition: "Definition", explanation: "Claude", clipping: "Clipping" };
 
 interface Props {
   node: TreeNode;
   top?: number;
+  /** Which margin it's in: it grows away from the page when you stretch it. */
+  side?: "left" | "right";
   inline?: boolean;
   editing: boolean;
   /** The tree is locked: show the branch, but offer nothing that changes it. */
@@ -22,6 +24,8 @@ interface Props {
   childCount: number;
   setRef?: (el: HTMLDivElement | null) => void;
   onOpen: () => void;
+  /** Open a web address (e.g. a definition's Wikipedia page) in the reader over the workspace. */
+  onRead?: (url: string) => void;
   onHover: (on: boolean) => void;
   onEdit: () => void;
   onDone: () => void;
@@ -31,7 +35,7 @@ interface Props {
   onResize: () => void;
 }
 
-export function BranchCard({ node: n, top, inline, editing, locked, focused, hot, childCount, setRef, onOpen, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
+export function BranchCard({ node: n, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
   const { updateNode, removeNode } = useStore.getState();
   const doc = useStore((s) => (n.docId ? s.docs[n.docId] : undefined));
   const elRef = useRef<HTMLDivElement | null>(null);
@@ -39,6 +43,28 @@ export function BranchCard({ node: n, top, inline, editing, locked, focused, hot
   const [armed, setArmed] = useState(false);
   const [draft, setDraft] = useState(n.body || "");
   const [src, setSrc] = useState("");
+  const [question, setQuestion] = useState("");
+  const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null);
+  const size = liveSize || n.size;
+  /** Stretch the card from its outer bottom corner. It keeps the size you give it. */
+  const startResize = (e: RPointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const el = elRef.current;
+    if (!el) return;
+    const x0 = e.clientX, y0 = e.clientY, w0 = el.offsetWidth, h0 = el.offsetHeight;
+    let next = { w: w0, h: h0 };
+    const move = (ev: PointerEvent) => {
+      const dx = (ev.clientX - x0) * (side === "left" ? -1 : 1);
+      next = { w: Math.round(clamp(w0 + dx, 180, 560)), h: Math.round(clamp(h0 + ev.clientY - y0, 72, 900)) };
+      setLiveSize(next);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      updateNode(n.id, { size: next }); setLiveSize(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   useEffect(() => { if (editing) setDraft(n.body || ""); }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -89,8 +115,9 @@ export function BranchCard({ node: n, top, inline, editing, locked, focused, hot
       data-branch={n.id}
       data-testid="branch-card"
       data-kind={n.kind}
-      className={`bcard bcard-${n.kind}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${editable ? " editable" : ""}`}
-      style={top != null && !inline ? { top } : undefined}
+      data-side={inline ? undefined : side}
+      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${editable ? " editable" : ""}`}
+      style={!inline ? { ...(top != null ? { top } : {}), ...(size ? { width: size.w, height: size.h } : {}) } : undefined}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       onClick={onClick}
@@ -98,7 +125,7 @@ export function BranchCard({ node: n, top, inline, editing, locked, focused, hot
       {!inline && !locked && <button className={`thread-handle card-handle${unattached ? " show" : ""}`} aria-label="Drag onto a sentence to link this branch there too" onPointerDown={onThreadStart} />}
       <div className="bcard-head mono-label">
         <span className="kdot" />
-        <span>{n.kind === "explanation" ? `Claude · ${n.depth || "educational"}` : KIND_LABEL[n.kind]}</span>
+        <span>{n.summary ? "Summary" : n.kind === "explanation" ? (n.question !== undefined ? "Claude · Ask" : `Claude · ${n.depth || "educational"}`) : n.kind === "definition" && n.defSource?.site === "Wikipedia" ? "Wikipedia" : KIND_LABEL[n.kind]}</span>
         {first && <><span>·</span><span>p. {first.page}</span></>}
         <span className="flex1" />
         {n.anchors.length > 1 && <span className="count">{n.anchors.length} links</span>}
@@ -121,7 +148,7 @@ export function BranchCard({ node: n, top, inline, editing, locked, focused, hot
           {n.pending ? <p className="bcard-meta"><span className="thinking"><i /><i /><i /></span> Looking it up…</p> : null}
           {!n.pending && !n.body && !editing && !locked && (
             <div className="bcard-empty">
-              <p>No dictionary entry was found.</p>
+              <p>{n.defSource?.site === "Wikipedia" ? "No Wikipedia article was found." : "No dictionary entry was found."}</p>
               <div className="row"><button className="btn btn-secondary btn-sm" onClick={onEdit}>Write your own</button><button className="btn btn-ghost btn-sm" onClick={() => explainNode(n)}><Sparkles size={12} />Explain with Claude</button></div>
             </div>
           )}
@@ -149,14 +176,22 @@ export function BranchCard({ node: n, top, inline, editing, locked, focused, hot
       ) : (
         <>
           {n.kind !== "source" && n.body ? <Markdown text={n.body} className={n.kind === "note" ? "bcard-note serif" : "bcard-body"} /> : null}
+          {n.kind === "explanation" && n.question && <p className="bcard-question serif">{n.question}</p>}
+          {n.kind === "explanation" && n.question === "" && !n.pending && !locked && (
+            <form className="bcard-ask" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (question.trim()) runAsk(n.id, question); }}>
+              <textarea autoFocus value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} aria-label="Ask Claude about this passage" placeholder="Ask Claude about this passage…"
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } if (e.key === "Escape") { e.preventDefault(); e.currentTarget.blur(); } }} />
+              <div className="row"><button type="submit" className="btn btn-primary btn-sm" disabled={!question.trim()}><Sparkles size={12} />Ask Claude</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => removeNode(n.id)}>Cancel</button></div>
+            </form>
+          )}
           {n.kind === "explanation" && n.pending && !n.body && <p className="bcard-meta"><span className="thinking"><i /><i /><i /></span> Claude is thinking…</p>}
           {n.kind === "explanation" && n.error && <p className="bcard-error">{n.error}</p>}
-          {n.kind === "definition" && n.body && <p className="bcard-meta">{n.defSource?.site ? <>From <a href={n.defSource.url} target="_blank" rel="noopener">{n.defSource.site}</a></> : "Your definition"}</p>}
+          {n.kind === "definition" && n.body && <p className="bcard-meta">{n.defSource?.site ? <>From <a href={n.defSource.url} target="_blank" rel="noopener" onClick={(e) => { if (!onRead || !n.defSource?.url || e.metaKey || e.ctrlKey) return; e.preventDefault(); e.stopPropagation(); onRead(n.defSource.url); }}>{n.defSource.site}</a></> : "Your definition"}</p>}
           {n.kind === "clipping" && !n.body && !locked && <button className="add-note" onClick={onEdit}>Add your note…</button>}
         </>
       )}
 
-      {n.kind === "explanation" && !n.pending && !locked && (
+      {n.kind === "explanation" && n.question === undefined && !n.pending && !locked && (
         <div className="bcard-depth" onClick={(e) => e.stopPropagation()}>
           <Segmented size="sm" label="Depth" value={n.depth || "educational"} onChange={(d: Depth) => runExplain(n.id, d)} options={[{ value: "educational", label: "Educational" }, { value: "technical", label: "Technical" }, { value: "both", label: "Both" }]} />
         </div>
@@ -172,16 +207,18 @@ export function BranchCard({ node: n, top, inline, editing, locked, focused, hot
 
       {!editing && (
         <div className="bcard-actions">
-          <button onClick={onOpen} title="Open as the next card"><ArrowRight size={13} />Open</button>
+          <button onClick={onOpen} title={n.kind === "source" ? "Open as the next card" : "Open to read and write"}><ArrowRight size={13} />Open</button>
           {editable && <button onClick={onEdit}><Pencil size={13} />Edit</button>}
           {n.kind === "definition" && n.body && !locked && <button onClick={() => explainNode(n)} title="Claude explains this term in the margin"><Sparkles size={13} />Explain</button>}
           <button onClick={onAsk} title="Ask Claude about this"><MessageCircle size={13} />Ask</button>
           {n.kind === "source" && (n.url || doc?.url) && <a href={n.url || doc?.url} target="_blank" rel="noopener" title="Open the original page"><ExternalLink size={13} />Original</a>}
+          {!inline && !locked && <button onClick={() => updateNode(n.id, { side: side === "left" ? "right" : "left" })} title={`Move to the ${side === "left" ? "right" : "left"} margin`}><ArrowLeftRight size={13} />Move</button>}
           {!locked && <button className={armed ? "armed" : ""} onClick={() => (armed ? removeNode(n.id) : setArmed(true))} title="Delete">
             <Trash2 size={13} />{armed ? (childCount ? `Delete with ${plural(childCount, "branch", "branches")}?` : "Delete?") : ""}
           </button>}
         </div>
       )}
+      {!inline && !locked && <span className="bcard-resize" role="presentation" title="Drag to resize" onPointerDown={startResize} onClick={(e) => e.stopPropagation()} />}
     </div>
   );
 }

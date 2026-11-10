@@ -9,6 +9,16 @@ export async function openTree(page: Page, treeId = "tr-payments", path?: string
   if (await skip.waitFor({ timeout: 1500 }).then(() => true, () => false)) await skip.click();
 }
 
+/** Open the margin of branch cards beside the page (it starts hidden so the page sits alone). */
+export async function showBranches(page: Page) {
+  // Earlier cards sit under later ones, so use the newest card's button.
+  const toggle = page.getByTestId("branches-toggle").last();
+  if ((await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
+  await expect(page.locator('[data-testid="margin"]').first()).toBeVisible();
+  // Branch cards slide to their passages when the margin opens; let them settle.
+  await page.waitForTimeout(450);
+}
+
 export const card = (page: Page, nodeId: string) => page.locator(`[data-testid="card"][data-node="${nodeId}"]`);
 
 /** Select an exact phrase inside a card, the way a user's drag would, and show the toolbar. */
@@ -37,10 +47,12 @@ export async function selectPhrase(cardEl: Locator, phrase: string) {
 
 /** A point in a card's margin, in view, that no branch covers. */
 export async function emptyMarginPoint(cardEl: Locator) {
-  return cardEl.getByTestId("margin").evaluate((margin) => {
+  return cardEl.locator('[data-testid="margin"][data-side="right"]').evaluate((margin) => {
     const mr = margin.getBoundingClientRect();
     const cards = [...margin.querySelectorAll("[data-branch]")].map((c) => c.getBoundingClientRect());
-    for (let y = Math.max(160, mr.top + 20); y < window.innerHeight - 40; y += 16) {
+    // Below the card's chapter bar, which stays at the top of the card as it scrolls.
+    const bar = margin.closest(".card-scroll")?.querySelector(".chapter-bar")?.getBoundingClientRect().bottom ?? 0;
+    for (let y = Math.max(160, mr.top + 20, bar + 20); y < window.innerHeight - 40; y += 16) {
       if (!cards.some((r) => y > r.top - 16 && y < r.bottom + 16)) return { x: mr.left + mr.width / 2, y };
     }
     throw new Error("No empty margin space in view");

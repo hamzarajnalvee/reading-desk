@@ -50,7 +50,7 @@
 .card-failed .row { display: flex; gap: 8px; }
 
 /* Reading surface */
-.canvas { position: relative; display: grid; grid-template-columns: minmax(0, var(--sheet-w)) var(--margin-w); justify-content: center; column-gap: 44px; padding: 28px 28px 140px; min-height: 100%; }
+.canvas { position: relative; display: grid; grid-template-columns: minmax(0, var(--sheet-w)); justify-content: center; column-gap: 44px; padding: 28px 28px 140px; min-height: 100%; }
 .sheet-wrap { min-width: 0; }
 .sheet { background: var(--paper); box-shadow: var(--shadow-sheet); border-radius: 4px; padding: 48px 56px 88px; font-family: var(--font-serif); font-size: var(--read-size); line-height: var(--read-leading); color: var(--ink); }
 .card-head { margin-bottom: 26px; display: grid; gap: 10px; font-family: var(--font-ui); }
@@ -96,6 +96,31 @@
 .kdot.k-definition, .bcard-definition .kdot { background: var(--k-definition); }
 .kdot.k-explanation, .bcard-explanation .kdot { background: var(--k-claude); }
 .kdot.k-clipping, .bcard-clipping .kdot { background: var(--k-clipping); }
+
+/* The margin of branch cards is shown from the card's Branches button, so by default the page sits alone in the centre. */
+/* With branches showing, the page stays in the centre with a margin on each side. */
+.canvas.with-margin { grid-template-columns: var(--margin-user, var(--margin-w)) minmax(0, var(--sheet-w)) var(--margin-user, var(--margin-w)); }
+.canvas:not(.with-margin) .margin { display: none; }
+
+/* Card tools: Contents and Branches, quiet icons in the card's top-right corner. */
+.card-tools { position: absolute; top: 10px; right: 12px; z-index: 6; display: flex; gap: 6px; }
+.card-tools.beside-close { right: 54px; }
+.card-tool { display: inline-flex; align-items: center; gap: 5px; height: 32px; min-width: 32px; justify-content: center; padding: 0 9px; border-radius: var(--r-pill); background: var(--surface-raised); border: 1px solid var(--hairline); color: var(--ink-2); font-size: 12px; transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
+.card-tool:hover { color: var(--ink); border-color: var(--border); }
+.card-tool.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+/* Contents: a panel over the left of the card, so the page doesn't move. */
+.contents-panel { position: absolute; top: 52px; left: calc(var(--spine-w) + 12px); bottom: 16px; z-index: 22; width: min(320px, calc(100% - var(--spine-w) - 24px)); display: flex; flex-direction: column; background: var(--surface-raised); border: 1px solid var(--hairline); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); animation: pop-in var(--t-med) var(--spring); }
+.contents-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 6px 16px; }
+.contents-panel ol { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; }
+.contents-item { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 8px; font-family: var(--font-serif); font-size: 14.5px; line-height: 1.3; color: var(--ink); }
+.contents-item.lvl-2, .contents-item.lvl-3, .contents-item.lvl-4 { font-size: 13.5px; color: var(--ink-2); }
+.contents-item:hover { background: var(--field); color: var(--ink); }
+.contents-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+/* Titles on a printed contents page jump to their part. */
+.mk.k-toclink { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-line); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.mk.k-toclink:hover { text-decoration-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .contents-panel { animation: none; } }
 
 /* Margin */
 .margin { position: relative; outline: none; min-height: 100%; border-radius: var(--r-md); transition: background var(--t-fast); cursor: text; }
@@ -156,7 +181,7 @@
 .bcard-edit-hint { font-size: 11px; }
 
 /* Selection toolbar */
-.sel-toolbar { position: absolute; z-index: 25; transform: translateX(-50%); display: flex; gap: 1px; padding: 4px; border-radius: 12px; background: var(--capsule); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow-pop); max-width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center; }
+.sel-toolbar { position: absolute; z-index: 25; transform: translateX(-50%); width: max-content; display: flex; gap: 1px; padding: 4px; border-radius: 12px; background: var(--capsule); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow-pop); max-width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center; }
 .sel-toolbar button { display: inline-flex; align-items: center; gap: 5px; color: var(--capsule-ink); font-size: 12.5px; font-weight: 500; padding: 6px 9px; border-radius: 8px; white-space: nowrap; }
 .sel-toolbar button:hover { background: rgba(255, 255, 255, 0.14); }
 .sel-toolbar button.claude { color: #c9d6f2; }
@@ -234,12 +259,18 @@
 .coach-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
 
 /* Cards adapt to their own width */
+/* Two margins on wide cards; a little narrower before they give way to one. */
+@container card (max-width: 1320px) { .canvas.with-margin { grid-template-columns: var(--margin-user, 230px) minmax(0, var(--sheet-w)) var(--margin-user, 230px); column-gap: 32px; } }
 @container card (max-width: 980px) {
-  .canvas { grid-template-columns: minmax(0, 1fr) 250px; column-gap: 32px; padding: 24px 20px 120px; }
+  .canvas { column-gap: 32px; padding: 24px 20px 120px; }
+  .canvas.with-margin { grid-template-columns: minmax(0, 1fr) var(--margin-user, 250px); }
+  /* Too narrow for two margins: every branch sits on the right. */
+  .canvas.with-margin .margin-left { display: none; }
   .sheet { padding: 40px 44px 72px; }
 }
 @container card (max-width: 760px) {
-  .canvas { grid-template-columns: minmax(0, 1fr) 210px; column-gap: 20px; padding: 16px 14px 120px; }
+  .canvas { column-gap: 20px; padding: 16px 14px 120px; }
+  .canvas.with-margin { grid-template-columns: minmax(0, 1fr) var(--margin-user, 210px); }
   .sheet { padding: 30px 26px 60px; font-size: 17px; }
   .card-head h1 { font-size: 25px; }
 }
@@ -252,7 +283,10 @@
   .stack.compact .slot { position: relative; width: 100cqw; scroll-snap-align: start; }
   .stack.compact .card { box-shadow: none; }
   .stack.compact .spine { display: none; }
-  .canvas { grid-template-columns: minmax(0, 1fr); padding: 0 0 100px; }
+  .canvas, .canvas.with-margin { grid-template-columns: minmax(0, 1fr); padding: 0 0 100px; }
+  .card-tools { top: 8px; right: 8px; }
+  .card-tools.beside-close { right: 48px; }
+  .contents-panel { left: 8px; right: 8px; width: auto; top: 48px; }
   .margin { display: none; }
   .sheet { padding: 24px 20px 64px; border-radius: 0; box-shadow: none; font-size: 17px; }
   .card-close { top: 8px; right: 8px; }
@@ -280,3 +314,76 @@ body:has([aria-modal="true"]) .coach { display: none; }
 .canvas.resizing { cursor: col-resize; user-select: none; }
 .canvas.resizing .bcard { transition: none; }
 @media (pointer: coarse) { .margin-grip { display: none; } }
+
+/* Chapter bar: where you are in the source, how far through, and a summary of this part. Stays at the top as you read. */
+.chapter-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 140px 0 16px; background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border-bottom: 1px solid var(--hairline); }
+.chapter-name { font-size: 14.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.chapter-bar .icon-btn:disabled { opacity: 0.3; cursor: default; }
+.chapter-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); transform-origin: left; transition: transform var(--t-fast); }
+.flex1 { flex: 1; }
+
+/* Books-style reading: chapter openings, a drop cap, justified text. The words are the source's own; only the styling changes. */
+.sheet-wrap.bookish .sheet { padding-left: 72px; padding-right: 72px; text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+.sheet-wrap.bookish .blk-h { text-align: center; font-size: 1.45em; font-weight: 500; letter-spacing: -0.01em; margin: 2.4em 0 1.4em; text-wrap: balance; }
+.sheet-wrap.bookish .card-head + .blk-h, .sheet-wrap.bookish .page-mark + .blk-h { margin-top: 0.6em; }
+.sheet-wrap.bookish .blk-h + .blk-p::first-letter { float: left; font-size: 3.4em; line-height: 0.85; padding: 0.06em 0.08em 0 0; color: var(--accent); font-weight: 500; }
+.sheet-wrap.bookish .blk-p + .blk-p { text-indent: 1.5em; margin-top: -0.6em; }
+@container card (max-width: 760px) { .sheet-wrap.bookish .sheet { padding-left: 26px; padding-right: 26px; text-align: left; } }
+
+/* Contents rows and summaries */
+.contents-row { display: flex; align-items: center; gap: 2px; }
+.contents-row .contents-item { flex: 1; min-width: 0; }
+.contents-sum { opacity: 0; width: 26px; height: 26px; transition: opacity var(--t-fast); }
+.contents-row:hover .contents-sum, .contents-sum:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .contents-sum { opacity: 1; } }
+.contents-summary { display: block; width: calc(100% - 8px); margin: 2px 0 6px 8px; text-align: left; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); padding: 6px 10px; border-radius: 8px; background: var(--a-note); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.contents-summary:hover { color: var(--ink); }
+
+/* A branch opened over the workspace, to read and type into. */
+.popup-scrim { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--ink) 18%, transparent); animation: fade-in var(--t-fast); }
+@keyframes fade-in { from { opacity: 0; } }
+.popup { width: min(640px, 100%); max-height: min(80vh, 760px); overflow: auto; display: grid; gap: 14px; align-content: start; background: var(--paper); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); padding: 18px 26px 16px; animation: pop-in var(--t-med) var(--spring); }
+.popup-head { display: flex; align-items: center; justify-content: space-between; }
+.popup-head .mono-label { display: inline-flex; align-items: center; gap: 6px; }
+.popup-title { font-size: 26px; font-weight: 500; }
+.popup-quote { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); border-left: 2px solid var(--accent-line); padding-left: 12px; }
+.popup-editor { width: 100%; border: 0; padding: 0; background: transparent; font-size: var(--read-size); line-height: var(--read-leading); color: var(--ink); resize: none; outline: none; caret-color: var(--accent); }
+.popup-body { font-size: 16px; line-height: 1.6; }
+.popup-foot { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--hairline); padding-top: 10px; }
+.popup-foot .danger { color: var(--danger); }
+
+/* The reader: a web page or Wikipedia article over the right of the workspace. */
+.reader-popup { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 45; width: min(560px, calc(100% - 24px)); display: flex; flex-direction: column; background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); animation: slide-left var(--t-med) var(--spring); }
+.reader-head { display: flex; align-items: center; gap: 6px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--hairline); }
+.reader-where { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.reader-title { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-body { flex: 1; overflow-y: auto; padding: 20px 28px 32px; }
+.reader-text { font-size: 17px; line-height: 1.65; color: var(--ink); }
+.reader-text p { margin: 0 0 0.9em; }
+.reader-text h3 { font-size: 1.15em; font-weight: 600; margin: 1.2em 0 0.5em; }
+.reader-text a { color: var(--link); text-underline-offset: 3px; }
+.reader-msg { display: grid; gap: 12px; justify-items: start; }
+.reader-foot { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 14px; border-top: 1px solid var(--hairline); }
+@media (prefers-reduced-motion: reduce) { .popup, .popup-scrim, .reader-popup { animation: none; } }
+
+/* Anything scrolled into view lands below the sticky chapter bar, not under it. */
+.card-scroll { scroll-padding-top: 56px; }
+@media (prefers-reduced-motion: reduce) { .bcard { transition: none; } .chapter-progress { transition: none; } }
+
+
+/* Branch cards in the left margin mirror the right: they hug the page and grow away from it. */
+.bcard.sized { overflow: auto; }
+.bcard.side-right.sized { right: auto; }
+.bcard.side-left.sized { left: auto; right: 0; }
+.bcard.side-left .card-handle { left: auto; right: -7px; }
+.bcard-resize { position: absolute; bottom: 0; width: 14px; height: 14px; opacity: 0; transition: opacity var(--t-fast); touch-action: none; }
+.bcard.side-right .bcard-resize { right: 0; cursor: nwse-resize; border-right: 2px solid var(--accent-line); border-bottom: 2px solid var(--accent-line); border-bottom-right-radius: 12px; }
+.bcard.side-left .bcard-resize { left: 0; cursor: nesw-resize; border-left: 2px solid var(--accent-line); border-bottom: 2px solid var(--accent-line); border-bottom-left-radius: 12px; }
+.bcard:hover .bcard-resize, .bcard.focused .bcard-resize { opacity: 1; }
+@media (pointer: coarse) { .bcard-resize { display: none; } }
+
+/* Asking Claude in the margin */
+.bcard-question { font-size: 15px; font-weight: 500; line-height: 1.35; margin: 2px 0 6px; }
+.bcard-ask { display: grid; gap: 8px; margin-top: 6px; cursor: default; }
+.bcard-ask textarea { width: 100%; resize: none; border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 9px; background: var(--surface-raised); font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); outline: none; }
+.bcard-ask textarea:focus { border-color: var(--accent); }

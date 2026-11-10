@@ -2,7 +2,7 @@
 import type { Anchor, Depth, TreeNode } from "../data/types";
 import { useStore } from "../store/useStore";
 import { contentOf } from "./content";
-import { defineTerm, explain, fetchAsDoc } from "./api";
+import { ask, defineTerm, explain, fetchAsDoc } from "./api";
 import { toast } from "./toast";
 
 const S = () => useStore.getState();
@@ -48,6 +48,47 @@ export function branchDefinition(treeId: string, parentId: string, anchor: Ancho
   return id;
 }
 
+/** The Wikipedia summary of a passage, as a card in the margin. The full article opens in the reader. */
+export function branchWikipedia(treeId: string, parentId: string, anchor: Anchor): string {
+  const term = anchor.quote.replace(/^[^\w]+|[^\w]+$/g, "").slice(0, 120) || anchor.quote;
+  const id = S().addBranch(treeId, { kind: "definition", title: term, parentId, anchors: [anchor], body: "", pending: true, defSource: { site: "Wikipedia", url: wikipediaUrl(term) } });
+  defineTerm(term, "wikipedia").then((r) => {
+    if (!S().nodes[id]) return;
+    if (r) S().updateNode(id, { title: r.term, body: r.text, defSource: r.source, pending: false });
+    else S().updateNode(id, { pending: false });
+  });
+  return id;
+}
+
+/** A card in the margin where you ask Claude about a passage. Claude runs only when you send the question. */
+export function branchAsk(treeId: string, parentId: string, anchor: Anchor): string {
+  return S().addBranch(treeId, { kind: "explanation", title: anchor.quote.slice(0, 60), parentId, anchors: [anchor], body: "", question: "" });
+}
+
+export async function runAsk(nodeId: string, question: string) {
+  const s = S();
+  const n = s.nodes[nodeId];
+  if (!n || !n.parentId || !question.trim()) return;
+  const parent = s.nodes[n.parentId];
+  const anchor = n.anchors[0];
+  const content = contentOf(parent, s.docs);
+  const block = content.blocks.find((b) => b.id === anchor?.blockId);
+  running.get(nodeId)?.abort();
+  const ctl = new AbortController();
+  running.set(nodeId, ctl);
+  s.updateNode(nodeId, { question: question.trim(), title: question.trim().slice(0, 80), pending: true, body: "", error: undefined });
+  try {
+    await ask({
+      title: content.title, context: block?.text || "", signal: ctl.signal,
+      messages: [{ role: "user", content: `About this passage: “${anchor?.quote || ""}”\n\n${question.trim()}` }],
+      onText: (t) => S().updateNode(nodeId, { body: t }),
+    });
+    S().updateNode(nodeId, { pending: false });
+  } catch (e) {
+    if ((e as Error).name !== "AbortError") S().updateNode(nodeId, { pending: false, error: "Couldn't reach Claude. Is the app's server running?" });
+  } finally { running.delete(nodeId); }
+}
+
 /** Ask Claude to explain a passage. Only ever called from an explicit button. */
 export function branchExplanation(treeId: string, parentId: string, anchor: Anchor, depth: Depth = "educational"): string {
   const id = S().addBranch(treeId, { kind: "explanation", title: anchor.quote.slice(0, 60), parentId, anchors: [anchor], body: "", depth, pending: true });
@@ -86,3 +127,6 @@ export function explainNode(n: TreeNode) {
   toast("Claude is explaining in the margin");
   return id;
 }
+
+/** The English Wikipedia article for a term, opened in the reader. */
+export const wikipediaUrl = (term: string) => `https://en.wikipedia.org/wiki/${encodeURIComponent(term.trim().replace(/\s+/g, "_"))}`;

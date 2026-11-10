@@ -24,6 +24,12 @@ export interface UIState {
   lastSavedAt: number;
   /** Width of the margin beside the page, set by dragging its edge. Unset means the default. */
   marginWidth?: number;
+  /** Show the margin of branch cards beside the page. Off by default so the page sits alone in the centre. */
+  branchesOpen?: boolean;
+  /** A web page or Wikipedia article open in the floating reader, and the passage that led there. Not saved. */
+  reader: null | { url: string; title?: string; treeId: string; parentId: string; anchor: Anchor | null };
+  /** A branch open in the floating editor (Open on a note, definition, explanation or clipping). Not saved. */
+  popup: string | null;
 }
 
 export interface Data {
@@ -70,7 +76,7 @@ interface Actions {
   resetToSample: () => void;
 }
 
-const initialUI: UIState = { theme: "system", sidebarOpen: true, drawer: null, focus: false, paletteOpen: false, coachStep: 0, pendingQuote: null, pendingAsk: null, lastSavedAt: 0 };
+const initialUI: UIState = { theme: "system", sidebarOpen: true, drawer: null, focus: false, paletteOpen: false, coachStep: 0, pendingQuote: null, pendingAsk: null, lastSavedAt: 0, reader: null, popup: null };
 
 export const sampleData = (): Omit<Data, "ui"> => ({
   trees: sampleTrees,
@@ -229,7 +235,7 @@ export const useStore = create<Data & Actions>()(
       partialize: (s) => ({
         trees: s.trees, nodes: Object.fromEntries(Object.entries(s.nodes).map(([k, n]) => [k, { ...n, pending: undefined, error: undefined }])),
         docs: s.docs, topics: s.topics, highlights: s.highlights, chats: s.chats,
-        ui: { ...s.ui, paletteOpen: false, pendingQuote: null, pendingAsk: null, drawer: null },
+        ui: { ...s.ui, paletteOpen: false, pendingQuote: null, pendingAsk: null, drawer: null, reader: null, popup: null },
       }),
     },
   ),

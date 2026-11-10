@@ -64,3 +64,34 @@ describe("ingestFile", () => {
     await expect(ingestFile(file("data.txt", "abc\u0000def"))).rejects.toThrow(/binary/);
   });
 });
+
+describe("EPUB contents", () => {
+  async function epub(files: Record<string, string>) {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    Object.entries(files).forEach(([k, v]) => zip.file(k, v));
+    const data = await zip.generateAsync({ type: "arraybuffer" });
+    return new File([data], "book.epub", { type: "application/epub+zip" });
+  }
+  const chapter = (title: string) => `<html><body><h1>${title}</h1><p>${"Words of this chapter. ".repeat(10)}</p></body></html>`;
+
+  it("reads the book's navigation into clickable contents", async () => {
+    const f = await epub({
+      "META-INF/container.xml": `<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>`,
+      "OEBPS/content.opf": `<package xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata><dc:title>A Book</dc:title></metadata><manifest>
+        <item id="nav" href="nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>
+        <item id="c1" href="text/one.xhtml" media-type="application/xhtml+xml"/>
+        <item id="c2" href="text/two.xhtml" media-type="application/xhtml+xml"/></manifest>
+        <spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>`,
+      "OEBPS/nav.xhtml": `<html><body><nav epub:type="toc"><ol><li><a href="text/one.xhtml">One</a></li><li><a href="text/two.xhtml#start">Two</a><ol><li><a href="text/two.xhtml#s">Two, part B</a></li></ol></li></ol></nav></body></html>`,
+      "OEBPS/text/one.xhtml": chapter("One"),
+      "OEBPS/text/two.xhtml": chapter("Two"),
+    });
+    const d = await ingestFile(f);
+    expect(d.title).toBe("A Book");
+    expect(d.toc?.map((t) => [t.title, t.level])).toEqual([["One", 1], ["Two", 1], ["Two, part B", 2]]);
+    const at = (id: string) => d.blocks.find((x) => x.id === id)!.text;
+    expect(at(d.toc![0].blockId)).toBe("One");
+    expect(at(d.toc![1].blockId)).toBe("Two");
+  });
+});

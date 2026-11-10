@@ -35,9 +35,9 @@ export async function summarise(o: { title: string; material: string; signal?: A
 }
 
 /** Dictionary definition (Wiktionary / Wikipedia). Null when nothing was found. */
-export async function defineTerm(term: string): Promise<{ term: string; text: string; source: Source } | null> {
+export async function defineTerm(term: string, source?: "wikipedia"): Promise<{ term: string; text: string; source: Source } | null> {
   try {
-    const r = await fetch(`/api/define?term=${encodeURIComponent(term)}`);
+    const r = await fetch(`/api/define?term=${encodeURIComponent(term)}${source ? `&source=${source}` : ""}`);
     return r.ok ? r.json() : null;
   } catch { return null; }
 }

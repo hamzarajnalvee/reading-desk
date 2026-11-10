@@ -28,11 +28,20 @@ Your trees as cards: a small silhouette of each tree's shape, the seed's title, 
 
 ### Tree (`/tree/:id`)
 - **Header:** tree title (editable), topic chips (add, remove, create), Cards | Map switch, Trails (resume a previous chain), Understanding, Ask Claude.
-- **Cards view:** the trail as sliding cards. Each card is a reading surface with a margin rail on its right showing that card's branches, level with their passages and joined by thin curved threads.
+- **Read view:** the trail as sliding cards. Each card is a reading surface centred on its own. The **Branches** button (top right of the card, with a count) opens a margin rail on its right showing that card's branches, level with their passages and joined by thin curved threads.
+  - **Two margins:** with branches showing, the page stays in the centre with a margin on each side. A branch goes to the margin nearest its passage (left half of the page → left), and **Move** swaps sides. On narrower cards every branch sits on the right.
+  - **Resizable branch cards:** drag a card's outer bottom corner; it keeps the size you give it.
+  - **Wikipedia** (W) adds the article's summary as a card in the margin; its Wikipedia link opens the full article in the reader. **Ask** (A) on a selection adds a card where you type a question, and Claude answers in that card. The header's Ask is for the whole trail.
+  - The margin starts hidden and the choice is remembered. Making a branch, clicking a marked passage or pulling a thread opens it.
+  - **Contents** (top right, shown when a source has parts): the source's own table of contents (PDF bookmarks, EPUB navigation), or its headings when it has none. Clicking an entry jumps to that part; the part you're reading is highlighted. Titles on a printed contents page are links to their parts too; the words themselves are unchanged.
   - Opening a branch adds it as the next card and closes any cards after the one you branched from.
   - Earlier cards collapse to spines showing their titles; click a spine or slide back to return.
   - On a phone each card is full width; swipe between cards, and branches open in a bottom sheet.
-- **Map view:** the whole tree, laid out left to right from the seed. Each node shows its kind, title and a snippet; edges show the passage that led there. Pan, zoom, fit, minimap. Clicking a node opens the trail from the seed to it in Cards view. The current trail is highlighted.
+  - **Open** on a note, definition, explanation or clipping shows it in a popup over the page to read and type into. **Open as card** puts it in the trail. Sources still open as the next card.
+  - **Chapter bar:** at the top of every source card, the part you're in, previous/next part, how far through you are, and **Summarise this section**. Summaries are notes anchored to the section's heading, so they sit beside it in the margin, and they're listed under their sections in **Contents & summaries**. A summary closed empty isn't kept.
+  - **Books-style text:** books (and sources with several parts) get chapter openings, a drop cap and justified text. Only the styling changes; the words are the source's own.
+  - **Reader:** web links and **Wikipedia** (W in the selection toolbar) open in a reader panel over the page, in the page's own words. Links inside it open in the same panel. **Keep as branch** saves the page as a source branch from the passage.
+- **Map view (the whole tree):** the whole tree, laid out left to right from the seed. Each node shows its kind, title and a snippet; edges show the passage that led there. Pan, zoom, fit, minimap. Clicking a node opens the trail from the seed to it in Cards view. The current trail is highlighted.
 - Opening a tree starts at the seed, with a "Resume" pill for the last trail.
 
 ### Topics (`/topics`)

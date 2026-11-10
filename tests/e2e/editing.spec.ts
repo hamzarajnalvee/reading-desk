@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { card, openTree } from "./helpers";
+import { card, openTree, showBranches } from "./helpers";
 
 test.describe("Writing in place", () => {
   test("clicking your own writing lets you type straight away, and it saves as you type", async ({ page }) => {
@@ -28,9 +28,11 @@ test.describe("Writing in place", () => {
 
   test("a margin note saves as you type, with no save button", async ({ page }) => {
     await openTree(page);
+    await showBranches(page);
     const note = card(page, "n-stripe").locator('[data-branch="n-token"]');
     await note.hover();
-    await note.getByRole("button", { name: "Edit" }).click();
+    await note.getByRole("button", { name: "Edit" }).focus();
+    await page.keyboard.press("Enter");
     const box = note.getByRole("textbox", { name: "Note" });
     await expect(box).toBeFocused();
     await page.keyboard.type(" Edited.");
@@ -41,6 +43,7 @@ test.describe("Writing in place", () => {
 
   test("clicking a margin note's words edits it in place, without opening a new card", async ({ page }) => {
     await openTree(page);
+    await showBranches(page);
     const note = card(page, "n-stripe").locator('[data-branch="n-token"]');
     await note.locator(".bcard-note").click();
     await expect(note.getByRole("textbox", { name: "Note" })).toBeFocused();
@@ -97,7 +100,8 @@ test.describe("Lock and delete", () => {
 test.describe("Stretching the margin", () => {
   test("dragging the margin's edge widens the cards, and the width is remembered", async ({ page }) => {
     await openTree(page);
-    const margin = card(page, "n-stripe").getByTestId("margin");
+    await showBranches(page);
+    const margin = card(page, "n-stripe").locator('[data-testid="margin"][data-side="right"]');
     const before = (await margin.boundingBox())!.width;
     const grip = margin.getByRole("separator", { name: "Stretch the margin" });
     await margin.hover();
@@ -112,6 +116,6 @@ test.describe("Stretching the margin", () => {
 
     await page.waitForTimeout(400);
     await page.reload();
-    await expect.poll(async () => Math.round((await card(page, "n-stripe").getByTestId("margin").boundingBox())!.width)).toBe(Math.round(wide));
+    await expect.poll(async () => Math.round((await card(page, "n-stripe").locator('[data-testid="margin"][data-side="right"]').boundingBox())!.width)).toBe(Math.round(wide));
   });
 });

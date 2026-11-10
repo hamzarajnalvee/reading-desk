@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { BookText, Lock, Maximize2, MessageCircle, Minimize2, Sparkles } from "lucide-react";
-import type { Anchor } from "../data/types";
+import type { Anchor, TreeNode } from "../data/types";
 import { useStore, useTree } from "../store/useStore";
 import { CardStack } from "../components/tree/CardStack";
 import { TreeMap } from "../components/tree/TreeMap";
@@ -11,6 +11,8 @@ import { TopicChips } from "../components/tree/TopicChips";
 import { TrailsMenu, useTrailLabel } from "../components/tree/TrailsMenu";
 import { TreeMenu } from "../components/tree/TreeMenu";
 import { CoachMarks } from "../components/CoachMarks";
+import { BranchPopup } from "../components/tree/BranchPopup";
+import { ReaderPopup } from "../components/tree/ReaderPopup";
 import { EmptyState, IconButton, Segmented } from "../components/ui";
 import { plural } from "../lib/util";
 import { useMedia } from "../lib/hooks";
@@ -47,6 +49,22 @@ export function TreeScreen() {
   const go = (p: string[], v: "cards" | "map" = "cards") => setParams(v === "map" ? { path: p.join(","), view: "map" } : { path: p.join(",") });
   const last = tree.trails[0];
   const showResume = view === "cards" && path.length === 1 && last && last.nodeIds.length > 1 && last.nodeIds.every((id) => nodes[id]);
+  /** The trail from the seed to a node, so it can be opened as the last card. */
+  const trailTo = (id: string) => {
+    const chain: string[] = [];
+    // Read the store directly: a branch made a moment ago isn't in this render's nodes yet.
+    const all = useStore.getState().nodes;
+    let n: TreeNode | undefined = all[id];
+    while (n) { chain.unshift(n.id); n = n.parentId ? all[n.parentId] : undefined; }
+    return chain;
+  };
+  const popupNode = ui.popup ? nodes[ui.popup] : undefined;
+  const closePopup = () => {
+    // A note or summary closed without a word in it isn't kept.
+    const n = ui.popup ? useStore.getState().nodes[ui.popup] : undefined;
+    if (n && n.kind === "note" && !n.body?.trim() && !Object.values(useStore.getState().nodes).some((c) => c.parentId === n.id)) useStore.getState().removeNode(n.id);
+    setUI({ popup: null });
+  };
   const pin = (a: Anchor, text: string) => {
     const parent = nodes[a.docId];
     if (!parent) return;
@@ -62,7 +80,7 @@ export function TreeScreen() {
           <div className="th-meta"><span className="muted small">{plural(count, "branch", "branches")}</span>{tree.locked && <span className="chip static locked-chip"><Lock size={11} aria-hidden />Locked</span>}<TopicChips tree={tree} /></div>
         </div>
         <div className="th-actions">
-          <Segmented label="View" value={view} onChange={(v) => go(path, v)} options={[{ value: "cards", label: "Cards" }, { value: "map", label: "Map" }]} />
+          <Segmented label="View" value={view} onChange={(v) => go(path, v)} options={[{ value: "cards", label: "Read" }, { value: "map", label: "Map" }]} />
           {!compact && <TrailsMenu tree={tree} onOpen={(ids) => go(ids)} />}
           <button className={`btn btn-ghost btn-sm${ui.drawer === "understanding" ? " on" : ""}`} data-coach="understanding" onClick={() => setUI({ drawer: ui.drawer === "understanding" ? null : "understanding" })}><BookText size={14} /><span>Understanding</span></button>
           <button className={`btn btn-ghost btn-sm${ui.drawer === "ask" ? " on" : ""}`} onClick={() => setUI({ drawer: ui.drawer === "ask" ? null : "ask" })} title="Ask Claude about this trail"><Sparkles size={14} /><span>Ask</span></button>
@@ -90,6 +108,13 @@ export function TreeScreen() {
       <div className="tree-body">
         {view === "map" ? <TreeMap tree={tree} path={path} onOpenPath={(p) => go(p)} /> : <CardStack tree={tree} path={path} onPath={(p) => go(p)} />}
         {ui.drawer === "understanding" && <UnderstandingDrawer tree={tree} onClose={() => setUI({ drawer: null })} />}
+        {ui.reader && ui.reader.treeId === tree.id && (
+          <ReaderPopup {...ui.reader} locked={!!tree.locked} onClose={() => setUI({ reader: null })} onKept={(id) => { setUI({ reader: null }); go(trailTo(id)); }} />
+        )}
+        {popupNode && popupNode.treeId === tree.id && (
+          <BranchPopup node={popupNode} locked={!!tree.locked} childCount={Object.values(nodes).filter((n) => n.parentId === popupNode.id).length}
+            onClose={closePopup} onOpenAsCard={() => { setUI({ popup: null }); go(trailTo(popupNode.id)); }} />
+        )}
         {ui.drawer === "ask" && <AskDrawer tree={tree} path={path} onClose={() => setUI({ drawer: null })} onPin={tree.locked ? undefined : pin} />}
       </div>
       {!compact && view === "cards" && <CoachMarks />}

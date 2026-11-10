@@ -14,6 +14,14 @@ export interface Block {
   links?: { start: number; end: number; href: string }[];
 }
 
+/** One entry in a source's table of contents, pointing at the block where that part begins. */
+export interface TocEntry {
+  title: string;
+  blockId: string;
+  /** 1 for chapters, 2 for sections inside them, and so on. */
+  level: number;
+}
+
 /** The text of a source (PDF, EPUB, web page…). Owned by one source node. */
 export interface Doc {
   id: string;
@@ -30,6 +38,8 @@ export interface Doc {
   /** Set when extraction may have dropped content (e.g. a very short web page). */
   warning?: string;
   hasOriginal?: boolean;
+  /** The source's own table of contents (PDF outline, EPUB navigation), when it has one. */
+  toc?: TocEntry[];
   lastOpenedAt?: number;
 }
 
@@ -83,6 +93,14 @@ export interface TreeNode {
   marginY?: number;
   /** Sources opened from a web address keep it, so they can be retried or opened in the browser. */
   url?: string;
+  /** Which margin the branch sits in, beside the page. Unset means the right. */
+  side?: "left" | "right";
+  /** A size you gave the branch's card by dragging its corner. */
+  size?: { w: number; h: number };
+  /** Explanations: a question you asked Claude about the passage (empty while you're still typing it). */
+  question?: string;
+  /** Notes: a summary of the section (or whole source) it's anchored to. Listed with the source's contents. */
+  summary?: boolean;
   /** Transient states, never persisted. */
   pending?: boolean;
   error?: string;

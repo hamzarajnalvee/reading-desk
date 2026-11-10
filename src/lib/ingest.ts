@@ -1,6 +1,6 @@
 // Turning uploaded files into Docs (blocks of text with page numbers).
 // PDF via pdf.js, Word via mammoth, EPUB via JSZip; HTML, Markdown and text are parsed directly.
-import type { Block, Doc, DocFormat, DocType } from "../data/types";
+import type { Block, Doc, DocFormat, DocType, TocEntry } from "../data/types";
 import { norm, uid } from "./util";
 
 export class IngestError extends Error {}
@@ -30,12 +30,36 @@ export function ingestText(title: string, text: string): Doc {
   return makeDoc(title || norm(text.split("\n")[0]).slice(0, 90), "paste", "article", paginate(textParas(text)));
 }
 
-function makeDoc(title: string, format: DocFormat, guess: DocType, raw: Omit<Block, "id">[]): Doc {
+/** A contents entry found while reading a file: `at` is an index into the raw blocks. */
+type RawToc = { title: string; level: number; at: number };
+
+function makeDoc(title: string, format: DocFormat, guess: DocType, raw: Omit<Block, "id">[], rawToc: RawToc[] = []): Doc {
   const id = uid("doc");
-  const blocks = raw.filter((b) => b.text.trim()).map((b, i) => ({ ...b, id: `${id}-b${i + 1}` }));
+  const blocks: Block[] = [];
+  raw.forEach((b) => { if (b.text.trim()) blocks.push({ ...b, id: `${id}-b${blocks.length + 1}` }); });
   if (!blocks.length) throw new IngestError("No readable text was found in this file.");
+  // Empty blocks are dropped, so map each raw index to the next kept block.
+  let k = 0;
+  const firstKeptFrom: number[] = [];
+  raw.forEach((b, i) => { firstKeptFrom[i] = k; if (b.text.trim()) k++; });
+  const toc: TocEntry[] = [];
+  for (const t of rawToc) {
+    const b = blocks[firstKeptFrom[t.at] ?? -1];
+    const name = norm(t.title);
+    if (b && name) toc.push({ title: name.slice(0, 200), blockId: b.id, level: Math.max(1, t.level) });
+  }
   const pages = Math.max(...blocks.map((b) => b.page));
-  return { id, title: title.slice(0, 300), type: guessType(title, blocks, pages, format, guess), format, pages, blocks, addedAt: Date.now() };
+  const doc: Doc = { id, title: title.slice(0, 300), type: guessType(title, blocks, pages, format, guess), format, pages, blocks, addedAt: Date.now() };
+  if (toc.length > 1) doc.toc = toc;
+  return doc;
+}
+
+const key = (s: string) => norm(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+/** The block in [from, to) where a contents entry begins: one whose text starts with the title, else `from`. */
+function findStart(raw: Omit<Block, "id">[], title: string, from: number, to: number): number {
+  const t = key(title).slice(0, 40);
+  if (t.length >= 3) for (let i = from; i < to; i++) if (key(raw[i].text).startsWith(t)) return i;
+  return from;
 }
 
 function guessType(title: string, blocks: Omit<Block, "id">[], pages: number, format: DocFormat, fallback: DocType): DocType {
@@ -56,17 +80,39 @@ async function ingestPdf(file: File, onProgress?: (m: string, f: number) => void
   try { pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise; }
   catch (e) { throw new IngestError((e as Error).name === "PasswordException" ? "This PDF is password-protected." : "This PDF couldn't be read."); }
   const out: Omit<Block, "id">[] = [];
+  const pageStart: number[] = [];
   for (let p = 1; p <= pdf.numPages; p++) {
     onProgress?.(`Reading page ${p} of ${pdf.numPages}`, p / pdf.numPages);
+    pageStart[p] = out.length;
     const tc = await (await pdf.getPage(p)).getTextContent();
     let s = "";
     for (const it of tc.items) if ("str" in it) { s += it.str; if (it.hasEOL) s += "\n"; }
     linesToParas(s).forEach((text) => out.push({ kind: looksLikeHeading(text) ? "h" : "p", text, page: p }));
   }
+  pageStart[pdf.numPages + 1] = out.length;
+  // The PDF's own bookmarks (its outline) become the contents, each pointing at the page it opens.
+  const toc: RawToc[] = [];
+  try {
+    type Item = { title: string; dest: string | unknown[] | null; items: Item[] };
+    const walk = async (items: Item[], level: number) => {
+      for (const it of items) {
+        if (toc.length >= 2000) return;
+        try {
+          const dest = typeof it.dest === "string" ? await pdf.getDestination(it.dest) : it.dest;
+          const ref = Array.isArray(dest) ? dest[0] : null;
+          const index = ref && typeof ref === "object" ? await pdf.getPageIndex(ref as Parameters<typeof pdf.getPageIndex>[0]) : typeof ref === "number" ? ref : -1;
+          const p = index + 1;
+          if (p >= 1 && p <= pdf.numPages && pageStart[p] < pageStart[p + 1]) toc.push({ title: it.title, level, at: findStart(out, it.title, pageStart[p], pageStart[p + 1]) });
+        } catch { /* an entry that points nowhere is skipped */ }
+        if (it.items?.length && level < 4) await walk(it.items, level + 1);
+      }
+    };
+    await walk(((await pdf.getOutline()) || []) as Item[], 1);
+  } catch { /* no outline */ }
   let title = "";
   try { const m = await pdf.getMetadata(); title = String((m.info as Record<string, unknown>)?.Title || "").trim(); } catch { /* no metadata */ }
   if (title.length < 6 || /^(untitled|microsoft word)/i.test(title)) title = baseName(file.name);
-  const doc = makeDoc(title, "pdf", "paper", out);
+  const doc = makeDoc(title, "pdf", "paper", out, toc);
   doc.hasOriginal = true;
   return doc;
 }
@@ -171,7 +217,9 @@ async function ingestEpub(file: File, onProgress?: (m: string, f: number) => voi
   const dc = "http://purl.org/dc/elements/1.1/";
   const title = norm(opf.getElementsByTagNameNS(dc, "title")[0]?.textContent || "") || baseName(file.name);
   const manifest: Record<string, string> = {};
-  Array.from(opf.getElementsByTagName("item")).forEach((i) => { manifest[i.getAttribute("id") || ""] = i.getAttribute("href") || ""; });
+  const items = Array.from(opf.getElementsByTagName("item"));
+  items.forEach((i) => { manifest[i.getAttribute("id") || ""] = i.getAttribute("href") || ""; });
+  const spineEl = opf.getElementsByTagName("spine")[0];
   const spine = Array.from(opf.getElementsByTagName("itemref")).map((i) => i.getAttribute("idref") || "");
   const dir = opfPath.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/") + 1) : "";
   const resolve = (href: string) => {
@@ -180,16 +228,68 @@ async function ingestEpub(file: File, onProgress?: (m: string, f: number) => voi
     return parts.join("/");
   };
   const out: Omit<Block, "id">[] = [];
+  /** Where each chapter file's blocks start and end in `out`. */
+  const files: Record<string, [number, number]> = {};
   let chapter = 0;
   for (let k = 0; k < spine.length; k++) {
     onProgress?.(`Reading chapter ${k + 1} of ${spine.length}`, k / spine.length);
-    const f = zip.file(resolve(manifest[spine[k]] || ""));
+    const path = resolve(manifest[spine[k]] || "");
+    const f = zip.file(path);
     if (!f) continue;
     const paras = htmlParas(new DOMParser().parseFromString(await f.async("string"), "text/html"));
     if (paras.reduce((s, p) => s + p.text.length, 0) < 40) continue;
     chapter++;
+    files[path] = [out.length, out.length + paras.length];
     paras.forEach((p) => out.push({ ...p, page: chapter }));
   }
   if (!out.length) throw new IngestError("No readable text was found (the book may be DRM-protected).");
-  return makeDoc(title, "epub", "book", out);
+
+  // The book's own contents: EPUB 3 navigation document, or the older NCX file.
+  const nav: { title: string; href: string; level: number; base: string }[] = [];
+  const navItem = items.find((i) => (i.getAttribute("properties") || "").split(/\s+/).includes("nav"));
+  const ncxItem = items.find((i) => i.getAttribute("id") === spineEl?.getAttribute("toc")) || items.find((i) => i.getAttribute("media-type") === "application/x-dtbncx+xml");
+  try {
+    if (navItem) {
+      const path = resolve(navItem.getAttribute("href") || "");
+      const d = new DOMParser().parseFromString(await zip.file(path)!.async("string"), "text/html");
+      const navs = Array.from(d.querySelectorAll("nav"));
+      const tocNav = navs.find((n) => /\btoc\b/.test(n.getAttribute("epub:type") || n.getAttribute("type") || n.getAttribute("role") || "")) || navs[0];
+      const walk = (ol: Element | null, level: number) => {
+        Array.from(ol?.children || []).forEach((li) => {
+          if (li.tagName !== "LI") return;
+          const a = li.querySelector(":scope > a, :scope > span");
+          const href = a?.getAttribute("href");
+          if (a && href) nav.push({ title: a.textContent || "", href, level, base: path });
+          walk(li.querySelector(":scope > ol"), level + 1);
+        });
+      };
+      walk(tocNav?.querySelector("ol") || null, 1);
+    }
+    if (!nav.length && ncxItem) {
+      const path = resolve(ncxItem.getAttribute("href") || "");
+      const d = new DOMParser().parseFromString(await zip.file(path)!.async("string"), "application/xml");
+      const walk = (parent: Element, level: number) => {
+        Array.from(parent.children).forEach((p) => {
+          if (p.localName !== "navPoint") return;
+          const label = p.getElementsByTagName("text")[0]?.textContent || "";
+          const src = p.getElementsByTagName("content")[0]?.getAttribute("src");
+          if (src) nav.push({ title: label, href: src, level, base: path });
+          walk(p, level + 1);
+        });
+      };
+      const map = d.getElementsByTagName("navMap")[0];
+      if (map) walk(map, 1);
+    }
+  } catch { /* contents couldn't be read; the book still opens */ }
+  const toc: RawToc[] = [];
+  for (const n of nav) {
+    // Links in the navigation file are relative to that file, not to the package.
+    const baseDir = n.base.includes("/") ? n.base.slice(0, n.base.lastIndexOf("/") + 1) : "";
+    const parts: string[] = [];
+    (baseDir + decodeURIComponent(n.href.split("#")[0])).split("/").forEach((p) => { if (p === "..") parts.pop(); else if (p && p !== ".") parts.push(p); });
+    const range = files[parts.join("/")];
+    if (!range) continue;
+    toc.push({ title: n.title, level: Math.min(n.level, 4), at: n.href.includes("#") ? findStart(out, n.title, range[0], range[1]) : range[0] });
+  }
+  return makeDoc(title, "epub", "book", out, toc);
 }

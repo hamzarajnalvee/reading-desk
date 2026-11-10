@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { card, dragThreadTo, emptyMarginPoint, expectPath, openTree, paste, selectPhrase } from "./helpers";
+import { card, dragThreadTo, emptyMarginPoint, expectPath, openTree, paste, selectPhrase, showBranches } from "./helpers";
 
 test.describe("Home", () => {
   test("lists trees and starts a new one from an idea", async ({ page }) => {
@@ -27,6 +27,7 @@ test.describe("Cards", () => {
 
   test("clicking a source branch opens it as the next card, and closing it goes back", async ({ page }) => {
     await openTree(page);
+    await showBranches(page);
     await card(page, "n-stripe").locator('[data-branch="n-primer"]').click();
     await expect(page.getByTestId("card")).toHaveCount(2);
     await expect(card(page, "n-primer")).toContainText("Every card payment involves five parties");
@@ -43,11 +44,17 @@ test.describe("Cards", () => {
 
   test("opening a branch from an earlier card replaces the cards after it", async ({ page }) => {
     await openTree(page, "tr-payments", ["n-stripe", "n-primer", "n-pci"]);
+    await showBranches(page);
     await page.getByRole("button", { name: /Go to card 1/ }).click();
     await expect.poll(() => page.getByTestId("card-stack").evaluate((el) => el.scrollLeft)).toBe(0);
     const token = card(page, "n-stripe").locator('[data-branch="n-token"]');
     await token.hover();
-    await token.getByRole("button", { name: "Open" }).click();
+    // A note opens over the workspace to read and write; "Open as card" puts it in the trail.
+    await token.getByRole("button", { name: "Open" }).focus();
+    await page.keyboard.press("Enter");
+    const popup = page.getByTestId("branch-popup");
+    await expect(popup.getByRole("textbox", { name: "Your writing" })).toHaveValue(/Tokenisation/);
+    await popup.getByRole("button", { name: "Open as card" }).click();
     await expect(page.getByTestId("card")).toHaveCount(2);
     await expectPath(page, ["n-stripe", "n-token"]);
   });
@@ -57,7 +64,7 @@ test.describe("Cards", () => {
     const c = card(page, "n-stripe");
     await selectPhrase(c, "two-person company");
     await c.getByTestId("selection-toolbar").getByRole("button", { name: /Note/ }).click();
-    const editor = c.getByTestId("margin").getByRole("textbox", { name: "Note" });
+    const editor = c.locator('[data-testid="margin"]').getByRole("textbox", { name: "Note" });
     await editor.fill("Small teams can sell globally from day one.");
     await editor.press("Control+Enter");
     await expect(c.getByTestId("branch-card").filter({ hasText: "Small teams can sell globally" })).toBeVisible();
@@ -66,11 +73,12 @@ test.describe("Cards", () => {
 
   test("dragging the thread into the margin writes a linked note", async ({ page }) => {
     await openTree(page);
+    await showBranches(page);
     const c = card(page, "n-stripe");
     await selectPhrase(c, "security, compliance and fraud checks");
     const p = await emptyMarginPoint(c);
     await dragThreadTo(page, c, p.x, p.y);
-    const editor = c.getByTestId("margin").getByRole("textbox", { name: "Note" });
+    const editor = c.locator('[data-testid="margin"]').getByRole("textbox", { name: "Note" });
     await expect(editor).toBeFocused();
     await editor.fill("The specialist work Stripe absorbs.");
     await editor.press("Control+Enter");
@@ -133,6 +141,7 @@ test.describe("Cards", () => {
 
   test("pasting into the margin creates a clipping with its source", async ({ page }) => {
     await openTree(page);
+    await showBranches(page);
     const c = card(page, "n-stripe");
     const p = await emptyMarginPoint(c);
     await page.mouse.click(p.x, p.y);
@@ -144,10 +153,13 @@ test.describe("Cards", () => {
 
   test("deleting a branch asks first and removes what grew from it", async ({ page }) => {
     await openTree(page);
+    await showBranches(page);
     const b = card(page, "n-stripe").locator('[data-branch="n-primer"]');
-    await b.hover();
-    await b.getByRole("button", { name: "Delete" }).click();
-    await b.getByRole("button", { name: /Delete with 3 branches\?/ }).click();
+    // The actions show on hover or keyboard focus; use the keyboard so scrolling can't hide them.
+    await b.getByRole("button", { name: "Delete" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(b.getByRole("button", { name: /Delete with 3 branches\?/ })).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(card(page, "n-stripe").locator('[data-branch="n-primer"]')).toHaveCount(0);
     await page.getByRole("radio", { name: "Map" }).click();
     await expect(page.getByTestId("map-node").first()).toBeVisible();
@@ -233,11 +245,151 @@ test.describe("Phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
   test("cards are full width and branches open in a sheet", async ({ page }) => {
     await openTree(page);
-    await expect(page.getByTestId("margin").first()).toBeHidden();
+    await expect(page.locator('[data-testid="margin"]').first()).toBeHidden();
     await page.getByRole("button", { name: /branches/ }).click();
     const sheet = page.getByRole("dialog", { name: "Branches" });
     await sheet.getByTestId("branch-card").filter({ hasText: "How Card Payments Work" }).click();
     await expect(card(page, "n-primer")).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+  });
+});
+
+test.describe("A quiet page", () => {
+  test("the page sits alone until you ask for its branches", async ({ page }) => {
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await expect(c.locator('[data-testid="margin"][data-side="right"]')).toBeHidden();
+    await expect(c.locator("mark.k-source").first()).toBeVisible();
+    const toggle = c.getByTestId("branches-toggle");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(c.getByTestId("branch-card").filter({ hasText: "How Card Payments Work" })).toBeVisible();
+    // The choice is remembered.
+    await page.waitForTimeout(400);
+    await page.reload();
+    await expect(card(page, "n-stripe").locator('[data-testid="margin"][data-side="right"]')).toBeVisible();
+    await card(page, "n-stripe").getByTestId("branches-toggle").click();
+    await expect(card(page, "n-stripe").locator('[data-testid="margin"][data-side="right"]')).toBeHidden();
+  });
+
+  test("making a branch opens the margin to show it", async ({ page }) => {
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await expect(c.locator('[data-testid="margin"][data-side="right"]')).toBeHidden();
+    await selectPhrase(c, "two-person company");
+    await page.keyboard.press("n");
+    await expect(c.locator('[data-testid="margin"]').getByRole("textbox", { name: "Note" })).toBeFocused();
+  });
+
+  test("the contents list jumps to a part of the source", async ({ page }) => {
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await c.getByRole("button", { name: "Contents", exact: true }).click();
+    const contents = c.getByTestId("contents");
+    await expect(contents.locator(".contents-item")).toHaveText(["What happens when you press Pay", "Why it matters"]);
+    await contents.getByRole("button", { name: "Why it matters", exact: true }).click();
+    await expect(c.locator("h2.blk", { hasText: "Why it matters" })).toBeInViewport();
+    await expect(contents.getByRole("button", { name: "Why it matters", exact: true })).toHaveAttribute("aria-current", "true");
+    await expect(c.getByTestId("chapter-bar")).toContainText("Why it matters");
+    await page.keyboard.press("Escape");
+    await expect(contents).toBeHidden();
+  });
+});
+
+test.describe("Moving between cards", () => {
+  test("a sideways trackpad swipe over a card slides between cards", async ({ page }) => {
+    await openTree(page, "tr-payments", ["n-stripe", "n-primer", "n-pci"]);
+    const stack = page.getByTestId("card-stack");
+    await expect.poll(() => stack.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    const start = await stack.evaluate((el) => el.scrollLeft);
+    const text = card(page, "n-pci").locator("[data-block]").first();
+    const box = (await text.boundingBox())!;
+    await page.mouse.move(box.x + 40, box.y + 10);
+    await page.mouse.wheel(-600, 0);
+    await expect.poll(() => stack.evaluate((el) => el.scrollLeft)).toBeLessThan(start);
+  });
+});
+
+test.describe("Reading around the source", () => {
+  test("Wikipedia's summary opens as a card in the margin, and the full article in the reader", async ({ page }) => {
+    await page.route("**/api/define?*", (route) => route.fulfill({ json: { term: "Payment card", text: "A payment card is a card that can be used to pay for goods and services.", source: { site: "Wikipedia", title: "Payment card", url: "https://en.wikipedia.org/wiki/Payment_card" } } }));
+    await page.route("**/api/fetch?*", (route) => route.fulfill({ json: { title: "Payment card", url: "https://en.wikipedia.org/wiki/Payment_card", site: "Wikipedia", html: "<p>A payment card is a card that can be used to pay for goods and services, in full.</p>" } }));
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await selectPhrase(c, "dozens of countries");
+    await page.keyboard.press("w");
+    const wiki = c.locator('[data-testid="branch-card"]', { hasText: "A payment card is a card" });
+    await expect(wiki).toContainText("Wikipedia");
+    await expect(page.getByTestId("card")).toHaveCount(1);
+    await wiki.getByRole("link", { name: "Wikipedia" }).click();
+    const reader = page.getByTestId("reader");
+    await expect(reader).toContainText("in full");
+    await reader.getByRole("button", { name: "Keep as branch" }).click();
+    await expect(page.getByTestId("card")).toHaveCount(2);
+  });
+
+  test("Ask on a passage opens a card in the margin and Claude answers there", async ({ page }) => {
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await selectPhrase(c, "dozens of countries");
+    await page.keyboard.press("a");
+    const box = c.getByRole("textbox", { name: "Ask Claude about this passage" });
+    await expect(box).toBeFocused();
+    await box.fill("Which countries?");
+    await page.keyboard.press("Enter");
+    const answer = c.locator('[data-testid="branch-card"]', { hasText: "Which countries?" });
+    await expect(answer).toContainText("Claude · Ask");
+    await expect(answer).toContainText("Demo mode");
+  });
+
+  test("a branch goes to the margin nearest its passage, can move sides, and can be resized", async ({ page }) => {
+    await page.setViewportSize({ width: 1700, height: 900 });
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await selectPhrase(c, "When you pay");
+    await page.keyboard.press("n");
+    const left = c.locator('[data-testid="margin"][data-side="left"]');
+    const editor = left.getByRole("textbox", { name: "Note" });
+    await expect(editor).toBeFocused();
+    await editor.fill("Starts on the left.");
+    await editor.press("Escape");
+    const note = left.locator('[data-testid="branch-card"]', { hasText: "Starts on the left." });
+    await expect(note).toBeVisible();
+    const before = (await note.boundingBox())!;
+    const corner = (await note.locator(".bcard-resize").boundingBox())!;
+    await note.hover();
+    await page.mouse.move(corner.x + 4, corner.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(corner.x - 76, corner.y + 64, { steps: 6 });
+    await page.mouse.up();
+    await expect.poll(async () => (await note.boundingBox())!.width).toBeGreaterThan(before.width + 50);
+    await note.getByRole("button", { name: "Move" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(c.locator('[data-testid="margin"][data-side="right"] [data-testid="branch-card"]', { hasText: "Starts on the left." })).toBeVisible();
+  });
+
+  test("a section summary is written in a popup and listed with the contents", async ({ page }) => {
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await c.getByRole("button", { name: "Contents", exact: true }).click();
+    await c.getByTestId("contents").getByRole("button", { name: "Summarise Why it matters" }).click();
+    const box = page.getByTestId("branch-popup").getByRole("textbox", { name: "Summary" });
+    await box.fill("Stripe takes on the hard, regulated parts so small teams can sell widely.");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("branch-popup")).toBeHidden();
+    // The contents stay open, now with the summary under its section.
+    await expect(c.getByTestId("contents")).toContainText("Stripe takes on the hard, regulated parts");
+    await showBranches(page);
+    await expect(c.locator('[data-testid="branch-card"]', { hasText: "Stripe takes on the hard" })).toContainText("Summary");
+  });
+
+  test("an empty summary isn't kept", async ({ page }) => {
+    await openTree(page);
+    const c = card(page, "n-stripe");
+    await c.getByTestId("chapter-bar").getByRole("button", { name: /Summarise/ }).click();
+    await expect(page.getByTestId("branch-popup")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await c.getByRole("button", { name: "Contents", exact: true }).click();
+    await expect(c.getByTestId("contents")).not.toContainText("Empty summary");
   });
 });

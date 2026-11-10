@@ -24,11 +24,12 @@ A **tree** grows from one **seed**. Every **branch** (`TreeNode`: source, note, 
 9. **Keep the margin quiet.** Tools appear on selection or hover.
 10. **Accessibility:** icon-only buttons get an `aria-label`; interactive things are real `<button>`/`<a>`; respect `prefers-reduced-motion`.
 11. Run `npm run typecheck`, `npm run build`, `npm test` and `npm run test:e2e` before you finish. All must pass. Add or update tests for behaviour you change: unit tests next to the code (`*.test.ts`), browser tests in `tests/e2e/`.
-12. Tests find elements by role, label or `data-testid`. Keep these when refactoring: `card` (+ `data-node`), `card-stack`, `margin`, `branch-card` (+ `data-kind`, `data-branch`), `selection-toolbar`, `thread-handle`, `tree-card`, `resume`, `tree-map`, `map-node` (+ `data-node`), `understanding`, `ask`, `topic-row`, `topic-detail`.
+12. Tests find elements by role, label or `data-testid`. Keep these when refactoring: `card` (+ `data-node`), `card-stack`, `margin`, `branch-card` (+ `data-kind`, `data-branch`), `selection-toolbar`, `thread-handle`, `tree-card`, `resume`, `tree-map`, `map-node` (+ `data-node`), `understanding`, `ask`, `topic-row`, `topic-detail`, `branches-toggle`, `contents`, `chapter-bar`, `branch-popup`, `reader`.
 
 ## Where things live
-- Tree screen (cards/map toggle, trail bar, resume, drawers): `src/screens/TreeScreen.tsx`
+- Tree screen (Read/Map toggle, trail bar, resume, drawers): `src/screens/TreeScreen.tsx`
 - Card stack and sliding: `src/components/tree/CardStack.tsx`
+- Popups over the page: `BranchPopup.tsx` (Open on a branch), `ReaderPopup.tsx` (web links, Wikipedia); contents and summaries: `ContentsPanel.tsx`, `src/lib/contents.ts`
 - One card (selection, threads, margin layout, paste/drop, link following): `src/components/tree/ReadingCard.tsx`
 - Margin branch cards: `src/components/tree/BranchCard.tsx`
 - Map: `src/components/tree/TreeMap.tsx`; layout: `src/lib/layout.ts`

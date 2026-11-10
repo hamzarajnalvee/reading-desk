@@ -1,8 +1,8 @@
-// SVG layer that draws threads: curved lines from a passage (at the page edge) to its margin card.
+// SVG layer that draws threads: curved lines from a passage (at the page's edge) to its card in the left or right margin.
 export interface Thread { key: string; annId: string; x1: number; y1: number; x2: number; y2: number; }
 
 export function curve(x1: number, y1: number, x2: number, y2: number) {
-  const dx = Math.max(24, Math.abs(x2 - x1) * 0.5);
+  const dx = Math.max(24, Math.abs(x2 - x1) * 0.5) * (x2 >= x1 ? 1 : -1);
   return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 }
 

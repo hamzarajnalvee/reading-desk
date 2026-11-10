@@ -52,14 +52,14 @@ app.post("/api/summarise", signedIn, async (req, res) => {
   await streamText(res, SUMMARY_SYSTEM, [{ role: "user", content: `Tree: ${title}\n\n${material.slice(0, 120_000)}` }], 900);
 });
 
-/** Dictionary definition (no AI): Wiktionary first for single words, then Wikipedia's summary. */
+/** Dictionary definition (no AI): Wiktionary first for single words, then Wikipedia's summary. `source=wikipedia` skips Wiktionary. */
 app.get("/api/define", async (req, res) => {
   const term = String(req.query.term || "").trim().slice(0, 120);
   if (!term) { res.status(400).json({ error: "No term" }); return; }
   if (OFFLINE) { res.status(404).json({ error: "Offline" }); return; }
   const headers = { "User-Agent": UA, Accept: "application/json" };
   try {
-    if (!/\s/.test(term)) {
+    if (!/\s/.test(term) && req.query.source !== "wikipedia") {
       const r = await fetch(`https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(term.toLowerCase())}`, { headers, signal: AbortSignal.timeout(6000) });
       if (r.ok) {
         const j = (await r.json()) as Record<string, { partOfSpeech: string; definitions: { definition: string }[] }[]>;
