@@ -203,4 +203,43 @@ test.describe("Essay workspace", () => {
     await page.mouse.up();
     await expect.poll(async () => (await sheet.boundingBox())!.x).toBeLessThan(x0 - 60);
   });
+  test("a page slid far to the left can still be scrolled to", async ({ page }) => {
+    await openTree(page, "tr-telos");
+    await showBranches(page);
+    const c = card(page, "n-telos");
+    const sheet = c.locator(".sheet-wrap");
+    await sheet.hover();
+    const grip = (await c.getByTestId("page-grip").boundingBox())!;
+    await page.mouse.move(grip.x + 10, grip.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(grip.x - 1400, grip.y + 8, { steps: 10 });
+    await page.mouse.up();
+    const scroller = c.locator(".card-scroll");
+    await scroller.evaluate((el) => { el.scrollLeft = 0; });
+    const box = (await scroller.boundingBox())!;
+    await expect.poll(async () => { await scroller.evaluate((el) => { el.scrollLeft = 0; }); return (await sheet.boundingBox())!.x; }).toBeGreaterThanOrEqual(box.x - 1);
+  });
+
+  test("a link can be moved to another sentence or removed, and each kind of branch looks its own", async ({ page }) => {
+    await openTree(page, "tr-telos");
+    await showBranches(page);
+    const c = card(page, "n-telos");
+    const def = c.locator('[data-branch="n-telos-def"]');
+    await expect(def).toHaveClass(/kind-(definition|wiki)/);
+    const end = c.locator('[data-branch-link="n-telos-def"] [data-testid="link-end"]').first();
+    await expect(end).toBeAttached();
+    // Drag the link's end onto another paragraph: it moves there.
+    const from = (await end.boundingBox())!;
+    const target = (await c.locator('.sheet [data-block]:not([data-block="n-telos-p2"])').last().boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target.x + 40, target.y + 8, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.getByText("Moved the link")).toBeVisible();
+    // Click it to unlink: the branch stays in the margin, unlinked.
+    await end.click({ force: true });
+    const menu = c.getByTestId("link-menu");
+    await menu.getByRole("button", { name: "Unlink from this passage" }).click();
+    await expect(def).toContainText("Not linked");
+  });
 });

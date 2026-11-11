@@ -1,6 +1,6 @@
 // A branch in a card's margin. One component with a variant per kind; click a source to open it as the next card, anything else to open it over the workspace.
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent } from "react";
-import { ArrowLeftRight, ArrowRight, BookOpen, ExternalLink, PenLine, MessageCircle, Pencil, RotateCw, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, BookOpen, ExternalLink, PenLine, MessageCircle, Pencil, RotateCw, Sparkles, Trash2, Unlink } from "lucide-react";
 import type { Anchor, Depth, Track, TreeNode } from "../../data/types";
 import { TRACK_LABEL, otherTrack, trackOf } from "../../lib/tracks";
 import { selectionAnchor } from "../../lib/anchors";
@@ -12,6 +12,8 @@ import { quoteToEssay, explainNode, loadUrl, noteTitle, runAsk, runExplain } fro
 import { clamp, plural } from "../../lib/util";
 
 export const KIND_LABEL: Record<TreeNode["kind"], string> = { source: "Source", note: "Note", definition: "Definition", explanation: "Claude", clipping: "Clipping" };
+/** The look a branch gets on the canvas, its thread and its mark on the page: its kind, with Wikipedia apart from the dictionary. */
+export const kindClass = (n: TreeNode) => (n.kind === "definition" && n.defSource?.site === "Wikipedia" ? "wiki" : n.kind);
 
 interface Props {
   node: TreeNode;
@@ -47,7 +49,7 @@ interface Props {
 }
 
 export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onReadBeside, reading, column, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
-  const { updateNode, removeNode } = useStore.getState();
+  const { updateNode, removeNode, removeAnchor } = useStore.getState();
   const doc = useStore((s) => (n.docId ? s.docs[n.docId] : undefined));
   // A source shows its article when you open it here, or when you've stretched its card to read in.
   const showArticle = n.kind === "source" && !!doc && !inline && (!!reading || !!n.size);
@@ -115,7 +117,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       if (!moved.current && Math.hypot(dx, dy) < 4) return;
       moved.current = true;
       ev.preventDefault();
-      next = { away: Math.round(clamp(start.away + dx * (side === "left" ? -1 : 1), -40, 900)), dy: Math.round(clamp(start.dy + dy, -2000, 4000)) };
+      next = { away: Math.round(clamp(start.away + dx * (side === "left" ? -1 : 1), -200, 4000)), dy: Math.round(clamp(start.dy + dy, -2000, 4000)) };
       setLiveNudge(next);
     };
     const up = () => {
@@ -177,7 +179,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       data-testid="branch-card"
       data-kind={n.kind}
       data-side={inline ? undefined : side}
-      className={`bcard bcard-${n.kind} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${column ? " reading-col" : ""}${editable ? " editable" : ""}${liveNudge ? " moving" : ""}`}
+      className={`bcard bcard-${n.kind} kind-${kindClass(n)} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${column ? " reading-col" : ""}${editable ? " editable" : ""}${liveNudge ? " moving" : ""}`}
       style={!inline ? { ...(top != null ? { top } : {}), ...(column ? { height: column } : size ? { width: size.w, height: size.h } : {}),
         // While dragging, the card follows the pointer; once dropped, the layout places it (its `dy` is part of where it sits).
         ...(!column && (nudge?.away || liveNudge) ? { transform: `translate(${(side === "left" ? -1 : 1) * (nudge?.away || 0)}px, ${liveNudge ? liveNudge.dy - (n.nudge?.dy || 0) : 0}px)` } : {}) } : undefined}
@@ -273,10 +275,13 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
         </div>
       )}
 
-      {n.anchors.length > 1 && (
-        <div className="linked-list">
-          {n.anchors.slice(1).map((x, i) => (
-            <button key={i} className="linked" onClick={() => onJump(x.blockId)}>Also linked to p. {x.page}: <span className="serif">“{x.quote.slice(0, 60)}{x.quote.length > 60 ? "…" : ""}”</span></button>
+      {(n.anchors.length > 1 || (focused && !inline && n.anchors.length > 0)) && (
+        <div className="linked-list" data-testid="link-list">
+          {n.anchors.map((x, i) => (i > 0 || focused) && (
+            <div key={i} className="linked-row">
+              <button className="linked" onClick={() => onJump(x.blockId)}>{i === 0 ? "Linked to" : "Also linked to"} p. {x.page}: <span className="serif">“{x.quote.slice(0, 60)}{x.quote.length > 60 ? "…" : ""}”</span></button>
+              {!locked && <button className="icon-btn unlink" aria-label={`Unlink from “${x.quote.slice(0, 40)}”`} title="Unlink from this passage (the branch stays)" onClick={(e) => { e.stopPropagation(); removeAnchor(n.id, i, top); }}><Unlink size={12} /></button>}
+            </div>
           ))}
         </div>
       )}

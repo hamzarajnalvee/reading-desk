@@ -71,6 +71,10 @@ interface Actions {
   /** Removes a branch and everything that grew from it. */
   removeNode: (id: string) => void;
   addAnchor: (id: string, anchor: Anchor) => void;
+  /** Unlink a branch from one of its passages. A branch left with no link stays in the margin at `marginY`. */
+  removeAnchor: (id: string, index: number, marginY?: number) => void;
+  /** Move one of a branch's links to another passage. */
+  replaceAnchor: (id: string, index: number, anchor: Anchor) => void;
 
   addHighlight: (nodeId: string, anchor: Anchor) => string;
   updateHighlight: (id: string, anchor: Anchor) => void;
@@ -197,6 +201,19 @@ export const useStore = create<Data & Actions>()(
         const n = s.nodes[id];
         if (!n || nodeLocked(s, id) || n.anchors.some((a) => a.blockId === anchor.blockId && a.start === anchor.start)) return {};
         return { nodes: { ...s.nodes, [id]: { ...n, anchors: [...n.anchors, anchor], marginY: undefined } } };
+      }),
+
+      removeAnchor: (id, index, marginY) => set((s) => {
+        const n = s.nodes[id];
+        if (!n || nodeLocked(s, id) || !n.anchors[index]) return {};
+        const anchors = n.anchors.filter((_, i) => i !== index);
+        return { nodes: { ...s.nodes, [id]: { ...n, anchors, ...(anchors.length ? {} : { marginY: marginY ?? n.marginY ?? 0 }) } } };
+      }),
+      replaceAnchor: (id, index, anchor) => set((s) => {
+        const n = s.nodes[id];
+        if (!n || nodeLocked(s, id) || !n.anchors[index]) return {};
+        const anchors = n.anchors.map((a, i) => (i === index ? anchor : a));
+        return { nodes: { ...s.nodes, [id]: { ...n, anchors } } };
       }),
 
       addHighlight: (nodeId, anchor) => {

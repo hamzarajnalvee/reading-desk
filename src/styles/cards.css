@@ -50,7 +50,7 @@
 .card-failed .row { display: flex; gap: 8px; }
 
 /* Reading surface */
-.canvas { position: relative; display: grid; grid-template-columns: minmax(0, var(--sheet-w)); justify-content: center; column-gap: 44px; padding: 28px 28px 140px; min-height: 100%; }
+.canvas { position: relative; display: grid; grid-template-columns: minmax(0, var(--sheet-w)); justify-content: safe center; column-gap: 44px; padding: 28px 28px 140px; padding-left: calc(28px + var(--pad-x, 0px)); min-height: 100%; }
 .sheet-wrap { min-width: 0; }
 .sheet { background: var(--paper); box-shadow: var(--shadow-sheet); border-radius: 4px; padding: 48px 56px 88px; font-family: var(--font-serif); font-size: var(--read-size); line-height: var(--read-leading); color: var(--ink); }
 .card-head { margin-bottom: 26px; display: grid; gap: 10px; font-family: var(--font-ui); }
@@ -262,14 +262,14 @@
 /* Two margins on wide cards; a little narrower before they give way to one. */
 @container card (max-width: 1320px) { .canvas.with-margin { grid-template-columns: var(--margin-user, 230px) minmax(0, var(--sheet-w)) var(--margin-user, 230px); column-gap: 32px; } }
 @container card (max-width: 980px) {
-  .canvas { column-gap: 32px; padding: 24px 20px 120px; }
+  .canvas { column-gap: 32px; padding: 24px 20px 120px; padding-left: calc(20px + var(--pad-x, 0px)); }
   .canvas.with-margin { grid-template-columns: minmax(0, 1fr) var(--margin-user, 250px); }
   /* Too narrow for two margins: every branch sits on the right. */
   .canvas.with-margin .margin-left { display: none; }
   .sheet { padding: 40px 44px 72px; }
 }
 @container card (max-width: 760px) {
-  .canvas { column-gap: 20px; padding: 16px 14px 120px; }
+  .canvas { column-gap: 20px; padding: 16px 14px 120px; padding-left: calc(14px + var(--pad-x, 0px)); }
   .canvas.with-margin { grid-template-columns: minmax(0, 1fr) var(--margin-user, 210px); }
   .sheet { padding: 30px 26px 60px; font-size: 17px; }
   .card-head h1 { font-size: 25px; }
@@ -468,7 +468,7 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .excerpt-bar button:hover { background: var(--capsule-active); }
 
 /* The source you're reading stands in its own column beyond the margin, as tall as the window; the page moves over for it. */
-.canvas.col-left { padding-left: calc(28px + var(--read-col, 520px) + 24px); }
+.canvas.col-left { padding-left: calc(28px + var(--read-col, 520px) + 24px + var(--pad-x, 0px)); }
 .canvas.col-right { padding-right: calc(28px + var(--read-col, 520px) + 24px); }
 .bcard.reading-col { width: var(--read-col, 520px) !important; display: flex; flex-direction: column; overflow: hidden; transition: top var(--t-fast) ease-out, box-shadow var(--t-fast); }
 .bcard.reading-col.side-right { left: calc(100% + 24px); right: auto; }
@@ -506,3 +506,48 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 mark.mk.k-attrib { background: none; color: var(--ink-3); font-style: italic; font-size: 0.88em; }
 .blk.blk-quote { white-space: pre-line; }
 .blk-quote mark[data-ann*="link|"] { color: var(--link); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+/* Each kind of branch has its own colour, carried by its card's edge and label, its thread, and its mark on the page,
+   so a definition, a Wikipedia article, a Claude answer, a note and a source can be told apart at a glance. */
+.bcard.kind-source { --kc: var(--accent); }
+.bcard.kind-note { --kc: var(--k-note); }
+.bcard.kind-definition { --kc: var(--k-definition); background: var(--a-definition); border-color: transparent; }
+.bcard.kind-wiki { --kc: var(--k-wiki); background: var(--a-wiki); border-color: transparent; }
+.bcard.kind-explanation { --kc: var(--k-claude); }
+.bcard.kind-clipping { --kc: var(--k-clipping); background: var(--a-clipping); }
+.bcard[class*="kind-"]:not(.inline) { border-left: 0; box-shadow: inset 4px 0 0 var(--kc); padding-left: 16px; }
+.bcard[class*="kind-"].hot:not(.inline), .bcard[class*="kind-"].focused:not(.inline) { box-shadow: inset 4px 0 0 var(--kc), 0 0 0 1.5px var(--kc), var(--shadow-sheet); }
+.bcard[class*="kind-"] > .bcard-head { color: var(--kc); }
+.bcard[class*="kind-"] > .bcard-head .kdot { background: var(--kc); }
+.bcard.kind-wiki .kdot { border-radius: 2px; }
+.bcard.kind-definition .kdot { border-radius: 2px; transform: rotate(45deg); }
+
+.thread.t-source { --kc: var(--accent); }
+.thread.t-note { --kc: var(--k-note); }
+.thread.t-definition { --kc: var(--k-definition); }
+.thread.t-wiki { --kc: var(--k-wiki); }
+.thread.t-explanation { --kc: var(--k-claude); }
+.thread.t-clipping { --kc: var(--k-clipping); }
+.thread[class*="t-"] path { stroke: var(--kc); opacity: 0.55; }
+.thread[class*="t-"] circle { fill: var(--kc); opacity: 0.8; }
+.thread[class*="t-"].hot path { opacity: 1; }
+/* The end of a link on the page: drag it to another sentence, or click it to unlink. */
+.thread circle.grab { fill: transparent; opacity: 1; pointer-events: auto; cursor: grab; }
+.thread circle.grab:hover { fill: var(--surface-raised); stroke: var(--kc, var(--accent)); stroke-width: 2; }
+.link-menu { display: grid; gap: 2px; max-width: 240px; }
+.link-menu p { padding: 4px 8px; margin: 0; }
+
+.mk.k-wiki { text-decoration: underline dashed var(--k-wiki); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.mk.k-definition, .mk.k-wiki { background: transparent; }
+.mk.k-definition.hot { background: var(--a-definition); }
+.mk.k-wiki.hot { background: var(--a-wiki); }
+.mk.k-explanation { box-shadow: inset 0 -1.5px 0 var(--k-claude); }
+.mk.k-note { box-shadow: inset 0 -1.5px 0 var(--k-note); }
+
+.linked-row { display: flex; align-items: center; gap: 4px; }
+.linked-row .linked { flex: 1; min-width: 0; }
+.linked-row .unlink { opacity: 0.6; }
+.linked-row .unlink:hover { opacity: 1; color: var(--danger); }
+.bcard[class*="kind-"].reading:not(.inline) { box-shadow: inset 4px 0 0 var(--kc), var(--shadow-pop); }
+.mk.hot { box-shadow: 0 0 0 2px var(--accent-line); }
+.threads.thread-ends { z-index: 5; }

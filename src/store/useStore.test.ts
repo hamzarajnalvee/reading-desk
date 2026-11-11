@@ -10,6 +10,16 @@ const anchor = (docId: string, quote = "x") => ({ docId, blockId: `${docId}-p1`,
 describe("trees and branches", () => {
   beforeEach(() => S().resetToSample());
 
+  it("moves and removes a branch's links, keeping an unlinked branch in the margin", () => {
+    const id = S().addBranch("tr-payments", { kind: "note", title: "N", parentId: "n-stripe", anchors: [anchor("n-stripe", "a"), anchor("n-stripe", "b")], body: "" });
+    S().replaceAnchor(id, 1, anchor("n-stripe", "c"));
+    expect(S().nodes[id].anchors.map((a) => a.quote)).toEqual(["a", "c"]);
+    S().removeAnchor(id, 0);
+    expect(S().nodes[id].anchors.map((a) => a.quote)).toEqual(["c"]);
+    S().removeAnchor(id, 0, 240);
+    expect(S().nodes[id]).toMatchObject({ anchors: [], marginY: 240 });
+  });
+
   it("starts a tree from an idea", () => {
     const id = S().createTree({ kind: "note", title: "Syllogisms", body: "All men are mortal." });
     const tree = S().trees.find((t) => t.id === id)!;
@@ -91,6 +101,8 @@ describe("locked trees", () => {
     S().updateNode("n-token", { body: "changed" });
     S().removeNode("n-primer");
     S().addAnchor("n-token", anchor("n-stripe", "other"));
+    S().removeAnchor("n-token", 0);
+    S().replaceAnchor("n-token", 0, anchor("n-stripe", "moved"));
     S().addHighlight("n-stripe", anchor("n-stripe", "y"));
     S().updateHighlight(hl, anchor("n-stripe", "z"));
     S().removeHighlight(hl);
