@@ -11,6 +11,15 @@ export function blockElOf(node: Node | null): HTMLElement | null {
 }
 
 function offsetIn(blockEl: HTMLElement, node: Node, off: number): number {
+  // On an original page a block is drawn as runs placed over the image; each run knows where it starts in the block.
+  const el = node.nodeType === 1 ? (node as Element) : node.parentElement;
+  const run = el?.closest("[data-start]") as HTMLElement | null;
+  if (run && blockEl.contains(run)) {
+    const r = document.createRange();
+    r.setStart(run, 0);
+    r.setEnd(node, off);
+    return Number(run.dataset.start) + r.toString().length;
+  }
   const r = document.createRange();
   r.setStart(blockEl, 0);
   r.setEnd(node, off);
@@ -27,7 +36,8 @@ export function selectionAnchor(doc: Readable, root?: Element): SelectionInfo | 
   const sb = blockElOf(r.startContainer);
   if (!sb || (root && !root.contains(sb))) return null;
   const eb = blockElOf(r.endContainer);
-  const full = sb.textContent || "";
+  const placed = sb.hasAttribute("data-runs");
+  const full = placed ? doc.blocks.find((b) => b.id === sb.dataset.block)?.text || "" : sb.textContent || "";
   let start = offsetIn(sb, r.startContainer, r.startOffset);
   let end = eb === sb ? offsetIn(sb, r.endContainer, r.endOffset) : full.length;
   while (start < end && /\s/.test(full[start])) start++;

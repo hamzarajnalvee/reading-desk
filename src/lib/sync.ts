@@ -92,6 +92,8 @@ async function syncOnce() {
     await pull(sb, userId);
     await push(sb, userId);
     useSync.setState({ status: "synced", lastSyncedAt: Date.now() });
+    // Original PDFs kept while signed out (or offline) go up now.
+    void import("./originals").then((m) => m.uploadPendingOriginals());
   } catch (e) {
     const offline = typeof navigator !== "undefined" && !navigator.onLine;
     useSync.setState({ status: offline ? "offline" : "error", error: offline ? null : (e as Error).message });

@@ -1,7 +1,9 @@
 // Turning uploaded files into Docs (blocks of text with page numbers).
 // PDF via pdf.js, Word via mammoth, EPUB via JSZip; HTML, Markdown and text are parsed directly.
-import type { Block, Doc, DocFormat, DocType, TocEntry } from "../data/types";
+import type { Block, Doc, DocFormat, DocType, OcrLine, TocEntry } from "../data/types";
 import { norm, uid } from "./util";
+import { loadPdfjs } from "./pdf";
+import { ocrParas } from "./pageText";
 
 export class IngestError extends Error {}
 
@@ -10,7 +12,12 @@ const baseName = (name: string) => name.replace(/\.[^.]+$/, "").replace(/[_]+/g,
 
 export async function ingestFile(file: File, onProgress?: (msg: string, frac: number) => void): Promise<Doc> {
   const e = ext(file.name);
-  if (e === "pdf" || file.type === "application/pdf") return ingestPdf(file, onProgress);
+  if (e === "pdf" || file.type === "application/pdf") {
+    const doc = await ingestPdf(file, onProgress);
+    // Keep the file itself, so its real pages (figures, tables, layout) can be shown.
+    await import("./originals").then((m) => m.keepOriginal(doc.id, file)).catch(() => { doc.hasOriginal = false; });
+    return doc;
+  }
   if (e === "docx") return ingestDocx(file);
   if (e === "epub") return ingestEpub(file, onProgress);
   if (["html", "htm", "xhtml"].includes(e)) {
@@ -73,21 +80,34 @@ function guessType(title: string, blocks: Omit<Block, "id">[], pages: number, fo
 
 /* ---------- PDF ---------- */
 async function ingestPdf(file: File, onProgress?: (m: string, f: number) => void): Promise<Doc> {
-  const pdfjs = await import("pdfjs-dist");
-  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  const pdfjs = await loadPdfjs();
   let pdf;
   try { pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise; }
   catch (e) { throw new IngestError((e as Error).name === "PasswordException" ? "This PDF is password-protected." : "This PDF couldn't be read."); }
   const out: Omit<Block, "id">[] = [];
   const pageStart: number[] = [];
-  for (let p = 1; p <= pdf.numPages; p++) {
-    onProgress?.(`Reading page ${p} of ${pdf.numPages}`, p / pdf.numPages);
-    pageStart[p] = out.length;
-    const tc = await (await pdf.getPage(p)).getTextContent();
-    let s = "";
-    for (const it of tc.items) if ("str" in it) { s += it.str; if (it.hasEOL) s += "\n"; }
-    linesToParas(s).forEach((text) => out.push({ kind: looksLikeHeading(text) ? "h" : "p", text, page: p }));
+  // Pages with no text layer (a scan, or text drawn as shapes) are read from the page image instead.
+  const ocr: Record<number, OcrLine[]> = {};
+  try {
+    for (let p = 1; p <= pdf.numPages; p++) {
+      onProgress?.(`Reading page ${p} of ${pdf.numPages}`, p / pdf.numPages);
+      pageStart[p] = out.length;
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      let s = "";
+      for (const it of tc.items) if ("str" in it) { s += it.str; if (it.hasEOL) s += "\n"; }
+      if (s.replace(/\s/g, "").length >= 20) {
+        linesToParas(s).forEach((text) => out.push({ kind: looksLikeHeading(text) ? "h" : "p", text, page: p }));
+        continue;
+      }
+      onProgress?.(`Recognising the words on page ${p} of ${pdf.numPages} (it has no text layer)`, p / pdf.numPages);
+      const { recognisePage } = await import("./ocr");
+      const lines = await recognisePage(page).catch(() => [] as OcrLine[]);
+      if (lines.length) ocr[p] = lines;
+      ocrParas(lines).forEach((b) => out.push({ ...b, page: p }));
+    }
+  } finally {
+    if (Object.keys(ocr).length || out.length === 0) await import("./ocr").then((m) => m.endOcr()).catch(() => {});
   }
   pageStart[pdf.numPages + 1] = out.length;
   // The PDF's own bookmarks (its outline) become the contents, each pointing at the page it opens.
@@ -114,6 +134,11 @@ async function ingestPdf(file: File, onProgress?: (m: string, f: number) => void
   if (title.length < 6 || /^(untitled|microsoft word)/i.test(title)) title = baseName(file.name);
   const doc = makeDoc(title, "pdf", "paper", out, toc);
   doc.hasOriginal = true;
+  const recognised = Object.keys(ocr).length;
+  if (recognised) {
+    doc.ocr = ocr;
+    doc.warning = `${recognised === pdf.numPages ? "This PDF's" : `${recognised} of its ${pdf.numPages} pages'`} words were recognised from the page images, so a few may be wrong. Switch to Original to check against the page.`;
+  }
   return doc;
 }
 

@@ -17,6 +17,9 @@ export interface Block {
   attrib?: number;
 }
 
+/** A line of text recognised on a page image. x, y, w, h are fractions of the page's width and height (y from the top). */
+export interface OcrLine { t: string; x: number; y: number; w: number; h: number }
+
 /** One entry in a source's table of contents, pointing at the block where that part begins. */
 export interface TocEntry {
   title: string;
@@ -40,7 +43,10 @@ export interface Doc {
   site?: string;
   /** Set when extraction may have dropped content (e.g. a very short web page). */
   warning?: string;
+  /** The original file (a PDF) is kept, so its real pages can be shown with figures, tables and layout. */
   hasOriginal?: boolean;
+  /** Pages whose words were recognised from the page image (no text layer): each line, with its box as fractions of the page. */
+  ocr?: Record<number, OcrLine[]>;
   /** The source's own table of contents (PDF outline, EPUB navigation), when it has one. */
   toc?: TocEntry[];
   lastOpenedAt?: number;

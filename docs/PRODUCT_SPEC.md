@@ -71,5 +71,9 @@ Everything saves automatically on the device (IndexedDB). Trails are recorded as
 ## Accuracy
 PDFs, EPUBs and pasted text are shown exactly as extracted. Web pages are reduced to their readable text with Mozilla's Readability; every web card keeps a link to the original, and pages where text may be missing (very short extractions) are flagged.
 
+**Original pages.** A PDF keeps its file, so its card can switch between **Text** (the extracted words) and **Original** (the real pages, with figures, tables and layout). On Original, the words are laid invisibly over the page image on the same blocks as the text, so selecting, highlighting, branching, threads and quotes work the same, and a mark made in one view shows in the other. The file is kept on the device and, when signed in, in the private Supabase Storage bucket `originals` (`supabase/migrations/0003_originals.sql`), so other devices can show the pages too; a device without it asks for the file once.
+
+**Pages with no text layer** (scans, or text drawn as shapes) are read on the device with Tesseract.js when the PDF is added. The recognised words become the text, chart labels and axis numbers are left out of it (they stay visible on Original), and the card warns that a few words may be wrong.
+
 ## Claude
 Only on request: Explain, Ask, Draft understanding. Answers are grounded in the cards on the current trail and cite (p. N). Explanations are labelled as Claude's.

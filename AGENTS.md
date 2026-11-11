@@ -24,7 +24,7 @@ A **tree** grows from one **seed**. Every **branch** (`TreeNode`: source, note, 
 9. **Keep the margin quiet.** Tools appear on selection or hover.
 10. **Accessibility:** icon-only buttons get an `aria-label`; interactive things are real `<button>`/`<a>`; respect `prefers-reduced-motion`.
 11. Run `npm run typecheck`, `npm run build`, `npm test` and `npm run test:e2e` before you finish. All must pass. Add or update tests for behaviour you change: unit tests next to the code (`*.test.ts`), browser tests in `tests/e2e/`.
-12. Tests find elements by role, label or `data-testid`. Keep these when refactoring: `card` (+ `data-node`), `card-stack`, `margin`, `branch-card` (+ `data-kind`, `data-branch`), `selection-toolbar`, `thread-handle`, `tree-card`, `resume`, `tree-map`, `map-node` (+ `data-node`), `understanding`, `ask`, `topic-row`, `topic-detail`, `branches-toggle`, `contents`, `chapter-bar`, `branch-popup`, `reader`, `add-to-tree`, `track-chip`, `notebook`, `notebook-entry`, `cite`, `sort-suggestions`, `zoom`, `article`, `excerpt-cite`, `search-hit`, `page-grip`, `page-edge`, `link-end`, `link-menu`, `link-list`.
+12. Tests find elements by role, label or `data-testid`. Keep these when refactoring: `card` (+ `data-node`), `card-stack`, `margin`, `branch-card` (+ `data-kind`, `data-branch`), `selection-toolbar`, `thread-handle`, `tree-card`, `resume`, `tree-map`, `map-node` (+ `data-node`), `understanding`, `ask`, `topic-row`, `topic-detail`, `branches-toggle`, `contents`, `chapter-bar`, `branch-popup`, `reader`, `add-to-tree`, `track-chip`, `notebook`, `notebook-entry`, `cite`, `sort-suggestions`, `zoom`, `article`, `excerpt-cite`, `search-hit`, `page-grip`, `page-edge`, `link-end`, `link-menu`, `link-list`, `view-original`, `original`.
 
 ## Where things live
 - Tree screen (Read/Map toggle, trail bar, resume, drawers): `src/screens/TreeScreen.tsx`
@@ -37,5 +37,6 @@ A **tree** grows from one **seed**. Every **branch** (`TreeNode`: source, note, 
 - Branch actions (from URL, definition, explanation): `src/lib/actions.ts`
 - Node content and tree walking: `src/lib/content.ts`
 - Text anchoring: `src/lib/anchors.ts`; clipboard/drop parsing: `src/lib/clipboard.ts`; file ingestion: `src/lib/ingest.ts`
+- PDFs as their original pages: `src/components/reader/OriginalPages.tsx` and `OriginalPage.tsx` (page image + invisible text placed on the blocks by `src/lib/pageText.ts`); original files: `src/lib/originals.ts` (IndexedDB + Supabase Storage bucket `originals`); words on pages with no text layer: `src/lib/ocr.ts` (Tesseract.js, served from `public/ocr`, copied by `scripts/copy-ocr-assets.mjs`)
 - Page extraction (Readability): `server/extract.ts`; prompts: `server/prompts.ts`; endpoints: `server/index.ts`; client: `src/lib/api.ts`
 - Backup export/import: `src/lib/backup.ts`

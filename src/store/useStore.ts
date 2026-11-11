@@ -34,6 +34,8 @@ export interface UIState {
   /** The page's own width and sideways position in Read view, set by dragging its edge and its grip. Unset means the defaults. */
   sheetWidth?: number;
   sheetShift?: number;
+  /** PDFs shown as their original pages rather than as text, by doc id. */
+  originalView?: Record<string, boolean>;
   /** A source branch whose article is open in place in its margin card. */
   readingBeside?: string | null;
   /** A branch open in the floating editor (Open on a note, definition, explanation or clipping). Not saved. */

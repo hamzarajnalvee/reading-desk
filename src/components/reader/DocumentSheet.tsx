@@ -7,17 +7,18 @@ import { resolveRange } from "../../lib/anchors";
 
 export interface MarkSpec { id: string; kind: string; anchors: Anchor[] }
 
-const PRIORITY = ["source", "definition", "explanation", "note", "clipping", "highlight"];
+const PRIORITY = ["source", "definition", "wiki", "explanation", "note", "clipping", "highlight"];
 
-function segments(block: Block, marks: MarkSpec[], hotId: string | null): ReactNode[] {
+/** A block's text, or the part of it from `from` to `to`, split into plain runs and <mark>s. */
+export function segments(block: Block, marks: MarkSpec[], hotId: string | null, from = 0, to = block.text.length): ReactNode[] {
   const ranges: { start: number; end: number; m: MarkSpec }[] = [];
   for (const m of marks) for (const a of m.anchors) {
     const r = resolveRange(block, a);
     if (r && r[1] > r[0]) ranges.push({ start: r[0], end: r[1], m });
   }
-  if (!ranges.length) return [block.text];
-  const cuts = new Set<number>([0, block.text.length]);
-  ranges.forEach((r) => { cuts.add(r.start); cuts.add(r.end); });
+  if (!ranges.length) return [block.text.slice(from, to)];
+  const cuts = new Set<number>([from, to]);
+  ranges.forEach((r) => { if (r.start > from && r.start < to) cuts.add(r.start); if (r.end > from && r.end < to) cuts.add(r.end); });
   const pts = [...cuts].sort((a, b) => a - b);
   const out: ReactNode[] = [];
   for (let i = 0; i < pts.length - 1; i++) {

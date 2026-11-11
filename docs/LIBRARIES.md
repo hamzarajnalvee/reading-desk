@@ -9,7 +9,8 @@ Reading Desk should feel calm and exact, like a good research tool, not a demo. 
 | The map | **React Flow** (`@xyflow/react`) | MIT | Pan, zoom, minimap, keyboard access and custom React nodes out of the box. Keep its small attribution on the map (the licence allows hiding it, but leaving it is good manners for a free tool). |
 | Map layout | **d3-hierarchy** | ISC | Tidy-tree layout (Reingold–Tilford): parents centred over children, no overlaps, left to right. Fast enough for thousands of nodes. |
 | Clean article text | **Mozilla Readability** + **jsdom** (server) | Apache-2.0 / MIT | The engine behind Firefox Reader View. Pulls the article out of a page without rewriting a word, and keeps the links so they can become branches. |
-| PDFs | **pdf.js** (`pdfjs-dist`) | Apache-2.0 | Mozilla's PDF engine. Extracts the text layer page by page. |
+| PDFs | **pdf.js** (`pdfjs-dist`) | Apache-2.0 | Mozilla's PDF engine. Extracts the text layer page by page, and draws the original pages (Text / Original switch) with the words placed invisibly over them. |
+| Words in page images | **Tesseract.js** + `@tesseract.js-data/eng` | Apache-2.0 | Reads pages that have no text layer (scans, text drawn as shapes) on the device. The engine and English model are copied into `public/ocr` on install, so nothing is fetched from a CDN. Recognised text carries a warning. |
 | EPUB | **JSZip** | MIT | An EPUB is a zip of XHTML chapters; we read them in spine order. |
 | Word | **mammoth** | BSD-2 | Turns .docx into clean HTML. |
 | Saving | **Zustand** + **idb-keyval** | MIT / Apache-2.0 | Small store; IndexedDB holds far more than localStorage and survives restarts. |
@@ -49,13 +50,11 @@ A 2D alternative for the same view: `react-force-graph-2d` or **Sigma.js** (MIT,
 
 | When | Job | Library | Licence | Notes |
 |---|---|---|---|---|
-| Next | **Original PDF pages** (see figures, tables, exact layout) | `react-pdf` (wraps pdf.js) | MIT | Render the page canvas with the text layer on top, so anchors still work. Toggle "Text / Original" on a card. |
 | Next | **Accounts and sync** between laptop and phone | **Supabase** (`@supabase/supabase-js`) | Apache-2.0 / MIT | Postgres + auth + file storage. Tables mirror the store: `trees`, `nodes`, `docs`, `topics`, `highlights`. Keep IndexedDB as the offline cache and sync on change. Row-level security so only you can read your rows. |
 | Alternative | Sync without a server you manage | **Yjs** + `y-indexeddb` (+ `y-websocket` or Liveblocks) | MIT | Conflict-free merging if you edit on two devices offline. More moving parts; choose this if offline-first matters more than simplicity. |
 | Soon | **Rich notes and understanding** (headings, bold, links, quotes) | **TipTap** (on ProseMirror) | MIT | Store as JSON; render read-only marks the same way. Add `[[` to link to another branch. |
 | Soon | **Phone install, offline** | `vite-plugin-pwa` (Workbox) | MIT | Adds a manifest and service worker so it installs like an app on iPhone and Android. |
 | Soon | **Fast search** across everything | **MiniSearch** or **FlexSearch** | MIT / Apache-2.0 | Fuzzy full-text search for the command palette over all node text. |
-| Later | **Scanned PDFs** with no text layer | **Tesseract.js** | Apache-2.0 | OCR in the browser. Mark OCR text with a warning, because it may not be 100% accurate. |
 | Later | **Clip from any site in one click** | A small browser extension (WebExtension API) | — | Sends the selection, its URL and title to Reading Desk as a branch. This is the honest replacement for an embedded Google pane, which browsers block. |
 | Later | **Better map layout** for very wide trees | **elkjs** | EPL-2.0 | Layered layouts with edge routing. Only if d3-hierarchy starts to feel cramped. |
 | Later | **Animations** between card and map | **Motion** (`motion`, formerly Framer Motion) | MIT | Shared-element transition: the card shrinks into its map node. Keep it under 300 ms. |

@@ -4,6 +4,8 @@ import { AlertTriangle, GripHorizontal, ChevronLeft, ChevronRight, ExternalLink,
 import type { Anchor, Content, Tree, TreeNode } from "../../data/types";
 import { useStore } from "../../store/useStore";
 import { DocumentSheet, type MarkSpec } from "../reader/DocumentSheet";
+import { OriginalPages } from "../reader/OriginalPages";
+import { Segmented } from "../ui";
 import { ThreadLayer, type Thread } from "../reader/ThreadLayer";
 import { SELECTION_KEYS, SelectionToolbar, type SelectionAction } from "../reader/SelectionToolbar";
 import { BranchCard, KIND_LABEL, kindClass } from "./BranchCard";
@@ -52,6 +54,9 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
 
   const content: Content = useMemo(() => contentOf(node, docs), [node, docs]);
   const doc = node.docId ? docs[node.docId] : undefined;
+  /** A PDF can be read as text or as its original pages (figures, tables, layout). */
+  const originalOn = useStore((s) => !!(doc?.hasOriginal && s.ui.originalView?.[doc.id]));
+  const setOriginal = (on: boolean) => { if (doc) setUI({ originalView: { ...useStore.getState().ui.originalView, [doc.id]: on } }); };
   const children = useMemo(() => Object.values(allNodes).filter((n) => n.parentId === node.id).sort((a, b) => a.createdAt - b.createdAt), [allNodes, node.id]);
   const grandCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -229,7 +234,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   }, [children, focusId, sideOf, writing, readingBeside, compact]);
   const raf = useRef(0);
   const scheduleLayout = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(compute); }, [compute]);
-  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, layout.padL, zoom, readingBeside, pageW, pageX]);
+  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, layout.padL, zoom, readingBeside, pageW, pageX, originalOn]);
   useEffect(() => {
     const ro = new ResizeObserver(scheduleLayout);
     if (canvasRef.current) ro.observe(canvasRef.current);
@@ -659,6 +664,10 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
             <span className="chapter-name serif">{part?.title || content.title}</span>
             {toc.length > 0 && <button className="icon-btn" aria-label="Next part" disabled={partIndex >= toc.length - 1} onClick={() => jumpToPart(toc[Math.max(0, partIndex + 1)].blockId)}><ChevronRight size={15} /></button>}
             <span className="flex1" />
+            {doc.hasOriginal && (
+              <span data-testid="view-original"><Segmented size="sm" label="Show as" value={originalOn ? "original" : "text"} onChange={(v) => setOriginal(v === "original")}
+                options={[{ value: "text", label: "Text" }, { value: "original", label: "Original" }]} /></span>
+            )}
             <span className="muted small tabular" aria-label="Progress">{Math.round(progress * 100)}%</span>
             {!locked && <button className="btn btn-ghost btn-sm" onClick={() => summarise(part?.blockId ?? null)}>
               <NotebookPen size={13} />{summaries[part?.blockId ?? content.blocks[0]?.id]?.length ? "Your summary" : toc.length ? "Summarise this section" : "Summarise"}
@@ -711,7 +720,8 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
                 </article>
               ) : (
                 <>
-                  <DocumentSheet content={content} marks={marks} hotId={hotId || focusId} flashBlockId={flash} showPages={!!doc && doc.pages > 1 && doc.format !== "epub"} header={header} />
+                  {originalOn && doc ? <OriginalPages doc={doc} marks={marks} hotId={hotId || focusId} header={header} />
+                    : <DocumentSheet content={content} marks={marks} hotId={hotId || focusId} flashBlockId={flash} showPages={!!doc && doc.pages > 1 && doc.format !== "epub"} header={header} />}
                   {writable && <button className="write-tail" onClick={() => startWriting()}>Keep writing…</button>}
                 </>
               )}
