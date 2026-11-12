@@ -23,7 +23,9 @@ const LOOSE_Y = 120;
 
 type Props =
   | { mode: "tree"; onClose: () => void; onCreated: (treeId: string) => void; anchor?: undefined; treeId?: undefined; parentId?: undefined }
-  | { mode: "branch"; anchor: Anchor | null; treeId: string; parentId: string; onClose: () => void; onCreated: (nodeId: string) => void };
+  | { mode: "branch"; anchor: Anchor | null; treeId: string; parentId: string; onClose: () => void; onCreated: (nodeId: string) => void;
+      /** Where an unlinked addition goes in the margin: where you were reading, so it doesn't land at the top of the page. */
+      marginY?: number };
 
 export function AddDialog(p: Props) {
   const { createTree, addBranch } = useStore.getState();
@@ -34,7 +36,8 @@ export function AddDialog(p: Props) {
   const [wiki, setWiki] = useState(false);
   const loose = p.mode === "branch" && !p.anchor;
   const anchors = p.mode === "branch" && p.anchor ? [p.anchor] : [];
-  const where = loose ? { marginY: LOOSE_Y } : {};
+  const looseY = (p.mode === "branch" && p.marginY) || LOOSE_Y;
+  const where = loose ? { marginY: looseY } : {};
   const tabs = p.mode === "branch" ? [SEARCH, ...TABS, ...(loose ? [LOOKUP] : [])] : TABS;
   const [where2, setWhere2] = useState<"papers" | "wikipedia">("papers");
   const [hits, setHits] = useState<SearchHit[] | null>(null);
@@ -92,7 +95,7 @@ export function AddDialog(p: Props) {
       finishDoc(doc);
     } else if (tab === "lookup" && p.mode === "branch") {
       if (!text.trim()) { setError("Enter a word or a name to look up."); return; }
-      p.onCreated(addDefinition(p.treeId, p.parentId, text, LOOSE_Y, wiki ? "wikipedia" : undefined));
+      p.onCreated(addDefinition(p.treeId, p.parentId, text, looseY, wiki ? "wikipedia" : undefined));
     } else if (tab === "paste") {
       if (!text.trim()) { setError("Paste some text first."); return; }
       finishDoc(ingestText(title.trim(), text));

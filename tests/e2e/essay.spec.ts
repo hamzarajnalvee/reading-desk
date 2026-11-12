@@ -242,4 +242,30 @@ test.describe("Essay workspace", () => {
     await menu.getByRole("button", { name: "Unlink from this passage" }).click();
     await expect(def).toContainText("Not linked");
   });
+  test("a note added low on the page appears where you are, without jumping to the top", async ({ page }) => {
+    await openTree(page, "tr-payments");
+    const c = page.getByTestId("card").last();
+    const scroller = c.locator(".card-scroll");
+    // Typing a note from a selection low on the page.
+    const last = await c.locator(".sheet [data-block]").last().textContent();
+    await selectPhrase(c, last!.trim().split(" ").slice(0, 3).join(" "));
+    const before = await scroller.evaluate((s) => s.scrollTop);
+    expect(before).toBeGreaterThan(200);
+    await c.getByTestId("selection-toolbar").getByRole("button", { name: /Note/ }).click();
+    const box = c.getByRole("textbox", { name: "Note" });
+    await expect(box).toBeFocused();
+    await page.keyboard.type("Stays here");
+    await expect(box).toBeInViewport();
+    expect(await scroller.evaluate((s) => s.scrollTop)).toBeGreaterThan(before - 150);
+    await page.keyboard.press("Escape");
+    // Adding a note with Add, scrolled down: it lands beside what you're reading, not at the top of the page.
+    await page.getByTestId("add-to-tree").click();
+    const dialog = page.getByRole("dialog", { name: "Add to this tree" });
+    await dialog.getByRole("tab", { name: "Write" }).click();
+    await dialog.getByRole("textbox", { name: "Your idea" }).fill("Added while reading the end");
+    await dialog.getByRole("button", { name: "Add branch" }).click();
+    const added = c.locator('[data-testid="branch-card"]', { hasText: "Added while reading the end" });
+    await expect(added).toBeInViewport();
+    expect(await scroller.evaluate((s) => s.scrollTop)).toBeGreaterThan(before - 150);
+  });
 });

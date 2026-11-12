@@ -90,6 +90,14 @@ export function TreeScreen() {
     go(trailTo(nodeId));
   };
   /** Something added straight to the seed waits in its margin. A source opens there with its article showing, beside the seed you write on. */
+  /** Open Add, remembering how far down the seed you are, so what you add appears beside what you're reading. */
+  const [addAt, setAddAt] = useState<number | undefined>();
+  const startAdding = () => {
+    const box = document.querySelector(`[data-testid="card"][data-node="${tree.seedId}"] .card-scroll`) as HTMLElement | null;
+    const z = useStore.getState().ui.readZoom ?? 1;
+    setAddAt(box ? Math.round(box.scrollTop / z + 120) : undefined);
+    setAdding(true);
+  };
   const added = (id: string) => {
     setAdding(false);
     const n = useStore.getState().nodes[id];
@@ -112,7 +120,7 @@ export function TreeScreen() {
         </div>
         <div className="th-actions">
           <Segmented label="View" value={view} onChange={(v) => go(path, v)} options={[{ value: "cards", label: "Read" }, { value: "map", label: "Map" }, { value: "notebook", label: "Notebook" }]} />
-          {!tree.locked && <button className="btn btn-ghost btn-sm" data-testid="add-to-tree" onClick={() => setAdding(true)} title="Add a paper, article, excerpt or definition to the seed"><Plus size={14} /><span>Add</span></button>}
+          {!tree.locked && <button className="btn btn-ghost btn-sm" data-testid="add-to-tree" onClick={startAdding} title="Add a paper, article, excerpt or definition to the seed"><Plus size={14} /><span>Add</span></button>}
           {!compact && <TrailsMenu tree={tree} onOpen={(ids) => go(ids)} />}
           <button className={`btn btn-ghost btn-sm${ui.drawer === "understanding" ? " on" : ""}`} data-coach="understanding" aria-label="Writing" onClick={() => setUI({ drawer: ui.drawer === "understanding" ? null : "understanding" })}><PenLine size={14} /><span>Writing</span></button>
           <button className={`btn btn-ghost btn-sm${ui.drawer === "ask" ? " on" : ""}`} onClick={() => setUI({ drawer: ui.drawer === "ask" ? null : "ask" })} title="Ask Claude about this trail"><Sparkles size={14} /><span>Ask</span></button>
@@ -152,7 +160,7 @@ export function TreeScreen() {
         {ui.drawer === "ask" && <AskDrawer tree={tree} path={path} onClose={() => setUI({ drawer: null })} onPin={tree.locked ? undefined : pin} />}
       </div>
       {!compact && view === "cards" && <CoachMarks />}
-      {adding && <AddDialog mode="branch" anchor={null} treeId={tree.id} parentId={tree.seedId} onClose={() => setAdding(false)} onCreated={added} />}
+      {adding && <AddDialog mode="branch" anchor={null} treeId={tree.id} parentId={tree.seedId} marginY={addAt} onClose={() => setAdding(false)} onCreated={added} />}
     </div>
   );
 }

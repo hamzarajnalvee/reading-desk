@@ -129,6 +129,18 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
   };
 
   useEffect(() => { if (editing) setDraft(n.body || ""); }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A new card is drawn before the margin has placed it (far above the page). Focusing its box then would make the
+  // browser scroll the page to the top, so wait until it's in place, focus without scrolling, and bring it into view gently.
+  const askRef = useRef<HTMLTextAreaElement | null>(null);
+  const placed = !!inline || (top != null && top > -9000);
+  const asking = n.kind === "explanation" && n.question === "" && !n.pending && !locked;
+  useEffect(() => {
+    const box = editing ? editorRef.current : asking ? askRef.current : null;
+    if (!box || !placed || document.activeElement === box) return;
+    box.focus({ preventScroll: true });
+    const l = box.value.length; if (editing) box.setSelectionRange(l, l);
+    elRef.current?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [editing, asking, placed]);
   useEffect(() => {
     if (!elRef.current) return;
     const ro = new ResizeObserver(() => onResize());
@@ -246,7 +258,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
 
       {editing ? (
         <div className="bcard-edit">
-          <textarea ref={editorRef} autoFocus value={draft} onChange={(e) => change(e.target.value)} onBlur={finish} onKeyDown={keys} rows={2} aria-label="Note"
+          <textarea ref={editorRef} value={draft} onChange={(e) => change(e.target.value)} onBlur={finish} onKeyDown={keys} rows={2} aria-label="Note"
             onFocus={(e) => { const l = e.currentTarget.value.length; e.currentTarget.setSelectionRange(l, l); }}
             placeholder={n.kind === "definition" ? "Write a definition…" : n.kind === "clipping" ? "Your note on this clipping…" : "Write a note…"} />
           <p className="bcard-edit-hint muted">Saved as you type · Esc when done</p>
@@ -257,7 +269,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
           {n.kind === "explanation" && n.question && <p className="bcard-question serif">{n.question}</p>}
           {n.kind === "explanation" && n.question === "" && !n.pending && !locked && (
             <form className="bcard-ask" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (question.trim()) runAsk(n.id, question); }}>
-              <textarea autoFocus value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} aria-label="Ask Claude about this passage" placeholder="Ask Claude about this passage…"
+              <textarea ref={askRef} value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} aria-label="Ask Claude about this passage" placeholder="Ask Claude about this passage…"
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } if (e.key === "Escape") { e.preventDefault(); e.currentTarget.blur(); } }} />
               <div className="row"><button type="submit" className="btn btn-primary btn-sm" disabled={!question.trim()}><Sparkles size={12} />Ask Claude</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => removeNode(n.id)}>Cancel</button></div>
             </form>
