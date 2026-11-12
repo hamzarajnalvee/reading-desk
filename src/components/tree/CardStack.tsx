@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import type { Tree } from "../../data/types";
 import { useStore } from "../../store/useStore";
+import { ErrorScreen } from "../ErrorScreen";
 import { ReadingCard } from "./ReadingCard";
 import { useMedia, isTyping } from "../../lib/hooks";
 
@@ -86,6 +87,7 @@ export function CardStack({ tree, path, onPath, zoom = 1, onZoom }: CardStackPro
         if (!node) return null;
         return (
           <div className="slot" key={id} style={compact ? undefined : { left: i * SPINE, zIndex: i + 1, width: `calc(100cqw - ${(path.length - 1) * SPINE}px)` }}>
+            <ErrorScreen scope="card" title={node.title}>
             <ReadingCard
               tree={tree} node={node} index={i} compact={compact} active={i === active}
               onActivate={() => setActive(i)}
@@ -96,6 +98,7 @@ export function CardStack({ tree, path, onPath, zoom = 1, onZoom }: CardStackPro
               }}
               onClose={i > 0 ? () => onPath(path.slice(0, i)) : undefined}
             />
+            </ErrorScreen>
           </div>
         );
       })}

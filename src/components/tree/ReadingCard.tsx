@@ -228,13 +228,25 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     let minLeft = (sr.left - cr.left) / z;
     cardRefs.current.forEach((el) => { if (el.offsetParent) minLeft = Math.min(minLeft, (el.getBoundingClientRect().left - cr.left) / z); });
     const EDGE = 16, prevPad = layoutRef.current.padL || 0;
-    padL = Math.max(0, prevPad + EDGE - minLeft);
+    // Grow only when something is actually cut off, give room back only when there's plenty spare (so it settles),
+    // and stop growing if more room doesn't help: some things on the left don't move with the padding, and chasing
+    // them would redraw forever.
+    padL = minLeft < 0 ? prevPad - minLeft + EDGE : minLeft > EDGE * 4 ? Math.max(0, prevPad - (minLeft - EDGE)) : prevPad;
+    padL = Math.min(Math.ceil(padL), 6000);
+    const g = padGuard.current;
+    // Room was added last time and the left edge didn't come into view: more room won't help, so stop growing.
+    // (Only when nothing else moved in between: while you drag the page or a card, each pass sees a new position.)
+    const key = `${pageX}|${pageW}|${z}|${marginW}|${Object.values(tops).join(",")}`;
+    if (padL > prevPad && g.key === key && g.from < prevPad && g.pad === prevPad && minLeft <= g.minLeft + 0.5) padL = prevPad;
+    if (padL !== prevPad) { g.from = prevPad; g.pad = padL; g.minLeft = minLeft; g.key = key; }
     const next = { tops, threads, leftOn, padL: Math.ceil(padL), colSide, colH };
     setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-  }, [children, focusId, sideOf, writing, readingBeside, compact]);
+  }, [children, focusId, sideOf, writing, readingBeside, compact, pageX, pageW, marginW]);
   const raf = useRef(0);
+  const padGuard = useRef({ from: 0, pad: 0, minLeft: 0, key: "" });
   const scheduleLayout = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(compute); }, [compute]);
-  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, layout.padL, zoom, readingBeside, pageW, pageX, originalOn]);
+  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, zoom, readingBeside, pageW, pageX, originalOn]);
+  // Padding changes resize the canvas, which the ResizeObserver below picks up; a second pass settles it.
   useEffect(() => {
     const ro = new ResizeObserver(scheduleLayout);
     if (canvasRef.current) ro.observe(canvasRef.current);

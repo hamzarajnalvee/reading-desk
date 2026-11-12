@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./app/App";
+import { ErrorScreen } from "./components/ErrorScreen";
 import { useStore } from "./store/useStore";
 import { startSync } from "./lib/sync";
 import "./styles/tokens.css";
@@ -29,8 +30,10 @@ function Hydrated({ children }: { children: React.ReactNode }) {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Hydrated><App /></Hydrated>
-    </BrowserRouter>
+    <ErrorScreen scope="app">
+      <BrowserRouter>
+        <Hydrated><App /></Hydrated>
+      </BrowserRouter>
+    </ErrorScreen>
   </React.StrictMode>,
 );
