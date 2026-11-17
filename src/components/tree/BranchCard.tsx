@@ -1,6 +1,6 @@
-// A branch in a card's margin. One component with a variant per kind; click a source to open it as the next card, anything else to open it over the workspace.
+// A branch in a card's margin. A source is read in the card; Open is what puts it in the trail. Anything else opens over the workspace.
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent } from "react";
-import { ArrowLeftRight, ArrowRight, BookOpen, ExternalLink, PenLine, MessageCircle, Pencil, RotateCw, Sparkles, Trash2, Unlink } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, ExternalLink, PenLine, MessageCircle, Pencil, RotateCw, Sparkles, Trash2, Unlink } from "lucide-react";
 import type { Anchor, Depth, Track, TreeNode } from "../../data/types";
 import { TRACK_LABEL, otherTrack, trackOf } from "../../lib/tracks";
 import { selectionAnchor } from "../../lib/anchors";
@@ -10,7 +10,10 @@ import { Markdown, Segmented, SourceChip } from "../ui";
 import { siteName } from "../../lib/clipboard";
 import { quoteToEssay, explainNode, loadUrl, noteTitle, runAsk, runExplain } from "../../lib/actions";
 import { resizeCard, type Corner } from "../../lib/cardGesture";
+import type { PaperLayout } from "../../lib/paperBranches";
 import { clamp, plural } from "../../lib/util";
+import { segments, type MarkSpec } from "../reader/DocumentSheet";
+import { PaperRail } from "./PaperRail";
 
 export const KIND_LABEL: Record<TreeNode["kind"], string> = { source: "Source", note: "Note", definition: "Definition", explanation: "Claude", clipping: "Clipping" };
 /** The look a branch gets on the canvas, its thread and its mark on the page: its kind, with Wikipedia apart from the dictionary. */
@@ -51,13 +54,18 @@ interface Props {
   onThreadStart: (e: RPointerEvent) => void;
   onJump: (blockId: string) => void;
   onResize: () => void;
+  /** Branches that grew from this paper. They stay beside it while the paper scrolls. */
+  paperKids?: TreeNode[];
 }
 
-export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onReadBeside, reading, column, pane, scrollWithin, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
+export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, column, pane, scrollWithin, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize, paperKids = [] }: Props) {
   const { updateNode, removeNode, removeAnchor } = useStore.getState();
   const doc = useStore((s) => (n.docId ? s.docs[n.docId] : undefined));
   // A source shows its article when you open it here, or when you've stretched its card to read in.
-  const showArticle = n.kind === "source" && !!doc && !inline && (!!reading || !!n.size);
+  const showArticle = n.kind === "source" && !!doc && !inline;
+  const [paperLayout, setPaperLayout] = useState<PaperLayout>("follow");
+  const [paperHot, setPaperHot] = useState<string | null>(null);
+  const paperMarks: MarkSpec[] = paperKids.map((k) => ({ id: k.id, kind: kindClass(k), anchors: k.anchors }));
   const articleRef = useRef<HTMLDivElement>(null);
   const [excerpt, setExcerpt] = useState<{ anchor: Anchor; x: number; y: number } | null>(null);
   const readExcerpt = () => setTimeout(() => {
@@ -176,12 +184,13 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [draft, editing]);
-  // Clicking your words edits them right here in the margin; clicking elsewhere on the card opens it as the next card.
-  // Buttons, links and inputs keep their own behaviour.
+  // Clicking your words edits them right here. A source stays in this card so you can scroll the paper;
+  // Open is what puts it in the trail. Buttons, links and inputs keep their own behaviour.
   const onClick = (e: MouseEvent) => {
     const t = e.target as HTMLElement;
     if (moved.current) { moved.current = false; return; } // that was a drag, not a click
     if (editing || t.closest("button, a, input, textarea, form, [role=radiogroup], .bcard-article")) return;
+    if (n.kind === "source" && !inline) return;
     if (editable && n.body && t.closest(".bcard-note, .bcard-body") && !window.getSelection()?.toString()) { onEdit(); return; }
     onOpen();
   };
@@ -229,7 +238,10 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
             : <p className="bcard-meta">{meta}{doc?.warning ? " · may be incomplete" : ""}</p>}
           {showArticle && doc && (
             <div className="bcard-article serif" ref={articleRef} data-testid="article" aria-label={`${n.title}, the article`} onMouseUp={readExcerpt} onKeyUp={readExcerpt}>
-              {doc.blocks.map((b) => (b.kind === "h" ? <h4 key={b.id} data-block={b.id}>{b.text}</h4> : <p key={b.id} data-block={b.id}>{b.text}</p>))}
+              {doc.blocks.map((b) => {
+                const Tag = b.kind === "h" ? "h4" : "p";
+                return <Tag key={b.id} data-block={b.id}>{segments(b, paperMarks, paperHot)}</Tag>;
+              })}
             </div>
           )}
           {excerpt && (
@@ -310,7 +322,12 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       {!editing && (
         <div className="bcard-actions">
           <button onClick={onOpen} title={n.kind === "source" ? "Open as the next card" : "Open to read and write"}><ArrowRight size={13} />Open</button>
-          {n.kind === "source" && onReadBeside && <button onClick={onReadBeside} aria-expanded={!!reading} title={reading ? "Fold the article back into the card" : "Read the article here, beside the page you're writing on"}><BookOpen size={13} />{reading ? "Close article" : "Read here"}</button>}
+          {showArticle && paperKids.length > 0 && (
+            <button aria-pressed={paperLayout === "spread"} data-testid="paper-spread" title={paperLayout === "spread" ? "Sit each branch beside the passage it came from" : "Show every branch, spaced evenly, with the passage it is linked to"}
+              onClick={(e) => { e.stopPropagation(); setPaperLayout((m) => (m === "spread" ? "follow" : "spread")); }}>
+              {paperLayout === "spread" ? "Beside the page" : "Spread evenly"}
+            </button>
+          )}
           {editable && <button onClick={onEdit}><Pencil size={13} />Edit</button>}
           {n.kind === "definition" && n.body && !locked && <button onClick={() => explainNode(n)} title="Claude explains this term in the margin"><Sparkles size={13} />Explain</button>}
           <button onClick={onAsk} title="Ask Claude about this"><MessageCircle size={13} />Ask</button>
@@ -320,6 +337,9 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
             <Trash2 size={13} />{armed ? (childCount ? `Delete with ${plural(childCount, "branch", "branches")}?` : "Delete?") : ""}
           </button>}
         </div>
+      )}
+      {showArticle && paperKids.length > 0 && !column && (
+        <PaperRail kids={paperKids} articleRef={articleRef} cardRef={elRef} mode={paperLayout} side={side} onHot={setPaperHot} />
       )}
       {!inline && !locked && corners.map((corner) => (
         <span key={corner} className={`bcard-resize ${corner}`} data-corner={corner} role="presentation" title="Drag to resize" onPointerDown={startResize(corner)} onClick={(e) => e.stopPropagation()} />

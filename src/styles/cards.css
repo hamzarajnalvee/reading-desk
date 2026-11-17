@@ -462,6 +462,21 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .bcard.reading:not(.sized):not(.inline) { width: min(520px, max(100%, calc((100cqw - var(--sheet-w)) / 2 - 56px))); z-index: 4; box-shadow: var(--shadow-pop); cursor: default; }
 .bcard.side-left.reading:not(.sized):not(.inline) { left: auto; right: 0; }
 .bcard-article { margin-top: 10px; max-height: min(70vh, 720px); overflow: auto; padding-right: 6px; font-size: var(--text-md); line-height: 1.6; color: var(--ink); cursor: text; user-select: text; overscroll-behavior: contain; }
+/* The card already scrolls to fit the screen, so the paper scrolls with it instead of in a second box. */
+/* A paper scrolls inside its card. The card stays put; the page moves. */
+.bcard.fit.reading > .bcard-scroll { overflow: hidden; display: flex; flex-direction: column; }
+.bcard.fit.reading .bcard-article { flex: 1 1 auto; min-height: 0; max-height: none; overflow: auto; }
+.bcard.fit:not(.reading) .bcard-article { max-height: none; overflow: visible; }
+.paper-rail { position: absolute; width: 220px; z-index: 5; pointer-events: none; }
+.paper-rail.side-right { left: calc(100% + 28px); }
+.paper-rail.side-left { right: calc(100% + 28px); }
+.paper-threads { position: absolute; inset: 0 auto 0 0; width: 36px; height: 100%; overflow: visible; }
+.paper-rail.side-left .paper-threads { left: auto; right: 0; }
+.paper-threads path { fill: none; stroke: var(--accent); stroke-width: 1.25; opacity: 0.55; }
+.paper-branch { pointer-events: auto; position: absolute; left: 36px; right: 0; display: grid; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-raised); box-shadow: var(--shadow-sheet); cursor: pointer; }
+.paper-rail.side-left .paper-branch { left: 0; right: 36px; }
+.paper-branch-title { font-size: 14px; font-weight: 500; line-height: 1.3; }
+.paper-quote { color: var(--ink-2); font-size: 12.5px; line-height: 1.35; }
 .bcard-article p { margin: 0 0 0.8em; }
 .bcard-article h4 { margin: 1em 0 0.4em; font-size: var(--text-lg); }
 /* A stretched source card reads its article in all the room you gave it. */

@@ -17,11 +17,11 @@ test.describe("Essay workspace", () => {
     const branch = card(page, "n-telos").locator('[data-testid="branch-card"][data-kind="source"]');
     await expect(branch).toContainText("Not linked");
     await expect(branch.getByTestId("article")).toContainText("Painting a wall");
-    // It stands in its own column beyond the margin, clear of the page and as tall as the window.
+    // The paper stays in that card, beside the seed, rather than opening as another card in the trail.
+    await expect(branch).not.toHaveClass(/reading-col/);
     const sheetBox = (await card(page, "n-telos").locator(".sheet").first().boundingBox())!;
-    const colBox = (await branch.boundingBox())!;
-    expect(colBox.x + colBox.width < sheetBox.x || colBox.x > sheetBox.x + sheetBox.width).toBe(true);
-    expect(colBox.height).toBeGreaterThan(400);
+    const cardBox = (await branch.boundingBox())!;
+    expect(cardBox.x + cardBox.width < sheetBox.x || cardBox.x > sheetBox.x + sheetBox.width).toBe(true);
     // It sits beside the seed on screen, and stays there while you write on the seed.
     const onScreen = async () => { const b = await branch.boundingBox(); return !!b && b.y > 0 && b.y < 900; };
     await expect.poll(onScreen).toBe(true);
@@ -48,9 +48,7 @@ test.describe("Essay workspace", () => {
     await expect(page.getByTestId("card")).toHaveCount(2);
     await page.locator(".trail-bar button").first().click();
     await expect(page.getByTestId("card")).toHaveCount(1);
-    await branch.getByRole("button", { name: "Close article" }).focus();
-    await page.keyboard.press("Enter");
-    await expect(branch.getByTestId("article")).toHaveCount(0);
+    await expect(branch.getByTestId("article")).toContainText("Painting a wall");
     // The grabbed words stay marked in the source, filed with the essay.
     await page.getByRole("radio", { name: "Notebook" }).click();
     const essay = page.getByTestId("notebook").locator(".nb-group.t-essay");
@@ -116,7 +114,10 @@ test.describe("Essay workspace", () => {
   test("Quote puts a passage in your writing with its source, and the link opens it", async ({ page }) => {
     await openTree(page, "tr-payments");
     await showBranches(page);
-    await card(page, "n-stripe").locator('[data-branch="n-primer"]').click();
+    const primerCard = card(page, "n-stripe").locator('[data-branch="n-primer"]');
+    await primerCard.scrollIntoViewIfNeeded();
+    await primerCard.hover();
+    await primerCard.getByRole("button", { name: "Open" }).click();
     const primer = card(page, "n-primer");
     await selectPhrase(primer, "interchange fee");
     await primer.getByTestId("selection-toolbar").getByRole("button", { name: "Quote" }).click();

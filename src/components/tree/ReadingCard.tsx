@@ -23,8 +23,7 @@ import { packMargin } from "../../lib/marginLayout";
 import { trackOf } from "../../lib/tracks";
 import { parseCite } from "../../lib/writing";
 
-/** Space between a margin and the reading column beyond it. */
-const COL_GAP = 24;
+const EMPTY_KIDS: TreeNode[] = [];
 
 type Sel = { anchor: Anchor; tx: number; ty: number; hx: number; hy: number };
 type Drag = { from: { anchor?: Anchor; nodeId?: string; relink?: number }; x1: number; y1: number; x2: number; y2: number };
@@ -59,6 +58,16 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const originalOn = useStore((s) => !!(doc?.hasOriginal && s.ui.originalView?.[doc.id]));
   const setOriginal = (on: boolean) => { if (doc) setUI({ originalView: { ...useStore.getState().ui.originalView, [doc.id]: on } }); };
   const children = useMemo(() => Object.values(allNodes).filter((n) => n.parentId === node.id).sort((a, b) => a.createdAt - b.createdAt), [allNodes, node.id]);
+  const kidsByParent = useMemo(() => {
+    const m = new Map<string, TreeNode[]>();
+    for (const n of Object.values(allNodes)) {
+      if (!n.parentId) continue;
+      const list = m.get(n.parentId);
+      if (list) list.push(n); else m.set(n.parentId, [n]);
+    }
+    for (const list of m.values()) list.sort((a, b) => a.createdAt - b.createdAt);
+    return m;
+  }, [allNodes]);
   const grandCounts = useMemo(() => {
     const c: Record<string, number> = {};
     Object.values(allNodes).forEach((n) => { if (n.parentId) c[n.parentId] = (c[n.parentId] || 0) + 1; });
@@ -222,27 +231,19 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
       const body = el.querySelector(":scope > .bcard-scroll") as HTMLElement | null;
       if (!body) return el.offsetHeight;
       const head = el.querySelector(":scope > .bcard-head") as HTMLElement | null;
+      const actions = el.querySelector(":scope > .bcard-actions") as HTMLElement | null;
+      const article = body.querySelector(".bcard-article") as HTMLElement | null;
       const cs = getComputedStyle(el);
       const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-      return Math.ceil((head?.offsetHeight ?? 0) + body.scrollHeight + pad + 8);
+      // The article scrolls inside the card, so its own overflow is part of how tall the paper is.
+      const extra = article ? Math.max(0, article.scrollHeight - article.clientHeight) : 0;
+      return Math.ceil((head?.offsetHeight ?? 0) + body.scrollHeight + extra + (actions?.offsetHeight ?? 0) + pad + 8);
     };
     // Each margin is laid out on its own: cards stack top to bottom, each at its passage or just below the one before.
-    // The source you're reading gets a column of its own beyond its margin, as tall as the window, following you as you scroll.
-    const col = all.find((o) => o.c.id === readingBeside && o.c.kind === "source" && !compact);
+    // A paper stays in its own card and scrolls there. It does not open a second column down the page.
     let colSide: "left" | "right" | null = null, colH = 0;
-    if (col) {
-      colSide = col.side;
-      const box = scrollRef.current, viewTop = (box?.scrollTop ?? 0) / z, viewH = (box?.clientHeight ?? 800) / z;
-      colH = Math.round(Math.max(320, viewH - 24));
-      const top = Math.round(Math.max(viewTop + 12, 0));
-      tops[col.c.id] = top;
-      const m = colSide === "left" ? ml! : mr;
-      const x1 = (colSide === "left" ? sr.left - cr.left : sr.right - cr.left) / z;
-      const x2 = colSide === "left" ? (m.left - cr.left) / z - COL_GAP : (m.right - cr.left) / z + COL_GAP;
-      col.ys.forEach(({ y, i }) => threads.push({ key: `${col.c.id}:${i}`, annId: col.c.id, ai: i, kind: kindClass(col.c), x1: Math.round(x1), y1: Math.round(y), x2: Math.round(x2), y2: Math.round(Math.min(Math.max(y, top + 22), top + colH - 22)) }));
-    }
     for (const side of ["left", "right"] as const) {
-      const items = all.filter((o) => o.side === side && o !== col);
+      const items = all.filter((o) => o.side === side);
       // A narrow card hides the left margin; its branches move to the right one, so there's nothing to lay out here.
       if (!items.length || (side === "left" && !ml)) continue;
       // Linked cards stay level with the passage that opened them. A card that's taller than the
@@ -292,7 +293,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     if (padL !== prevPad) { g.from = prevPad; g.pad = padL; g.minLeft = minLeft; g.key = key; }
     const next = { tops, threads, leftOn, padL: Math.ceil(padL), colSide, colH, scrolls, pane };
     setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-  }, [children, sideOf, writing, readingBeside, compact, pageX, pageW, marginW]);
+  }, [children, sideOf, writing, compact, pageX, pageW, marginW]);
   const raf = useRef(0);
   const padGuard = useRef({ from: 0, pad: 0, minLeft: 0, key: "" });
   const padSeen = useRef(0);
@@ -323,7 +324,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     return () => cancelAnimationFrame(id);
   }, [zoom, compact]);
   const scheduleLayout = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(compute); }, [compute]);
-  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, zoom, readingBeside, pageW, pageX, originalOn]);
+  useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, zoom, pageW, pageX, originalOn]);
   // Padding changes resize the canvas, which the ResizeObserver below picks up; a second pass settles it.
   useEffect(() => {
     const ro = new ResizeObserver(scheduleLayout);
@@ -590,7 +591,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     const i = markInfo(e.target); if (!i) return;
     const branch = i.ids.map((id) => allNodes[id]).find(Boolean);
     const link = i.ids.find((id) => id.startsWith("link|"));
-    if (branch?.kind === "source") { onOpen(branch.id); return; }
+    if (branch?.kind === "source") { focusBranch(branch.id); return; }
     if (branch) { focusBranch(branch.id); return; }
     if (link) {
       const [, blockId, start, ...rest] = link.split("|");
@@ -754,7 +755,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     column: layout.colSide && readingBeside === c.id ? layout.colH : undefined,
     pane: layout.pane,
     scrollWithin: layout.scrolls[c.id],
-    onReadBeside: c.kind === "source" ? () => { setUI({ readingBeside: readingBeside === c.id ? null : c.id }); setFocusId(c.id); } : undefined,
+    paperKids: kidsByParent.get(c.id) ?? EMPTY_KIDS,
     onHover: (on: boolean) => setHotId(on ? c.id : null),
     onEdit: () => { setEditingId(c.id); setFocusId(c.id); },
     onDone: () => setEditingId(null),

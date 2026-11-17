@@ -25,10 +25,14 @@ test.describe("Cards", () => {
     await expect(page.locator(".trail-bar")).toContainText("3D Secure Explained");
   });
 
-  test("clicking a source branch opens it as the next card, and closing it goes back", async ({ page }) => {
+  test("a source is read inside its margin card, and Open still makes it the next card", async ({ page }) => {
     await openTree(page);
     await showBranches(page);
-    await card(page, "n-stripe").locator('[data-branch="n-primer"]').click();
+    const branch = card(page, "n-stripe").locator('[data-branch="n-primer"]');
+    await branch.click();
+    await expect(page.getByTestId("card")).toHaveCount(1);
+    await expect(branch.getByTestId("article")).toContainText("Every card payment involves five parties");
+    await branch.getByRole("button", { name: "Open" }).click();
     await expect(page.getByTestId("card")).toHaveCount(2);
     await expect(card(page, "n-primer")).toContainText("Every card payment involves five parties");
     await expectPath(page, ["n-stripe", "n-primer"]);
@@ -36,10 +40,32 @@ test.describe("Cards", () => {
     await expect(page.getByTestId("card")).toHaveCount(1);
   });
 
-  test("clicking a source passage in the text opens it too", async ({ page }) => {
+  test("a paper's branches stay beside it, and can be spread out with their passages", async ({ page }) => {
+    await openTree(page);
+    await showBranches(page);
+    const branch = card(page, "n-stripe").locator('[data-branch="n-primer"]');
+    await branch.scrollIntoViewIfNeeded();
+    await branch.click();
+    await expect(page.getByTestId("card")).toHaveCount(1);
+    const article = branch.getByTestId("article");
+    await expect(article).toHaveCSS("overflow-y", "auto");
+    await branch.getByRole("button", { name: "Spread evenly" }).click();
+    const rail = branch.getByTestId("paper-rail");
+    await expect(rail).toHaveAttribute("data-mode", "spread");
+    await expect(rail.getByTestId("paper-branch")).toHaveCount(3);
+    await expect(rail.getByTestId("paper-branch").filter({ hasText: "interchange fee" })).toBeVisible();
+    await rail.getByRole("button", { name: /PCI DSS/ }).click();
+    await expect(page.getByTestId("card")).toHaveCount(1);
+    await expect(article).toContainText("PCI DSS");
+    await branch.getByRole("button", { name: "Beside the page" }).click();
+    await expect(rail).toHaveAttribute("data-mode", "follow");
+  });
+
+  test("clicking a source passage keeps the paper in its margin card", async ({ page }) => {
     await openTree(page);
     await card(page, "n-stripe").locator("mark.k-source", { hasText: "card networks" }).click();
-    await expect(card(page, "n-primer")).toBeVisible();
+    await expect(page.getByTestId("card")).toHaveCount(1);
+    await expect(card(page, "n-stripe").locator('[data-branch="n-primer"]').getByTestId("article")).toContainText("Every card payment involves five parties");
   });
 
   test("opening a branch from an earlier card replaces the cards after it", async ({ page }) => {

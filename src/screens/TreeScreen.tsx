@@ -98,10 +98,9 @@ export function TreeScreen() {
     setAddAt(box ? Math.round(box.scrollTop / z + 120) : undefined);
     setAdding(true);
   };
-  const added = (id: string) => {
+  const added = () => {
     setAdding(false);
-    const n = useStore.getState().nodes[id];
-    setUI({ branchesOpen: true, ...(n?.kind === "source" ? { readingBeside: id } : {}) });
+    setUI({ branchesOpen: true, readingBeside: null });
     go([tree.seedId]);
   };
   const pin = (a: Anchor, text: string) => {
