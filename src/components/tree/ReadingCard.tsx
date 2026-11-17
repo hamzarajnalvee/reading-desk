@@ -12,13 +12,14 @@ import { BranchCard, KIND_LABEL, kindClass } from "./BranchCard";
 import { AddDialog } from "./AddDialog";
 import { ContentsPanel } from "./ContentsPanel";
 import { contentsLinks, contentsOf, currentEntry } from "../../lib/contents";
-import { markFor, reanchor, selectionAnchor, sentenceAnchorAt } from "../../lib/anchors";
+import { markFor, rangeForAnchor, reanchor, selectionAnchor, sentenceAnchorAt } from "../../lib/anchors";
 import { readTransfer } from "../../lib/clipboard";
 import { bodyBlocks, bodyOffset, contentOf } from "../../lib/content";
 import { quoteToEssay, branchAsk, branchDefinition, branchExplanation, branchWikipedia, loadUrl, noteTitle } from "../../lib/actions";
 import { toast } from "../../lib/toast";
 import { clamp, plural } from "../../lib/util";
 import { isTyping } from "../../lib/hooks";
+import { packMargin } from "../../lib/marginLayout";
 import { trackOf } from "../../lib/tracks";
 import { parseCite } from "../../lib/writing";
 
@@ -96,7 +97,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const [focusId, setFocusId] = useState<string | null>(null);
   const [hotId, setHotId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [layout, setLayout] = useState<{ tops: Record<string, number>; threads: Thread[]; leftOn: boolean; padL?: number; colSide?: "left" | "right" | null; colH?: number }>({ tops: {}, threads: [], leftOn: false });
+  const [layout, setLayout] = useState<{ tops: Record<string, number>; threads: Thread[]; leftOn: boolean; padL?: number; colSide?: "left" | "right" | null; colH?: number; scrolls: Record<string, number>; pane: number }>({ tops: {}, threads: [], leftOn: false, scrolls: {}, pane: 720 });
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const [caretY, setCaretY] = useState<number | null>(null);
@@ -117,6 +118,18 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const marginW = dragMarginW ?? savedMarginW;
   /** Read view zoom. The page and its margins are scaled as one (CSS zoom), so on-screen distances are divided by it to get page units. */
   const zoom = useStore((s) => (compact ? 1 : s.ui.readZoom ?? 1));
+  // The zoomed box collapses to nothing under CSS zoom unless it has an explicit width.
+  // That width is the page itself, so zoom scales it instead of stretching it to the window.
+  const [frameW, setFrameW] = useState(0);
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const apply = () => { const w = canvas.offsetWidth; setFrameW((prev) => (prev === w ? prev : w)); };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [zoom, layout.padL, marginW, branchesOpen]);
   const sheetWidth = useStore((s) => (compact ? undefined : s.ui.sheetWidth));
   const sheetShift = useStore((s) => (compact ? 0 : s.ui.sheetShift ?? 0));
   const [livePage, setLivePage] = useState<{ w?: number; x: number } | null>(null);
@@ -153,10 +166,14 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   const compute = useCallback(() => {
     const canvas = canvasRef.current, margin = marginRef.current, sheet = sheetRef.current, marginL = marginLeftRef.current;
     if (!canvas || !margin || !sheet) return;
-    if (!margin.offsetParent) { setLayout((p) => (p.threads.length ? { tops: {}, threads: [], leftOn: p.leftOn } : p)); return; }
+    if (!margin.offsetParent) { setLayout((p) => (p.threads.length ? { tops: {}, threads: [], leftOn: p.leftOn, scrolls: {}, pane: p.pane } : p)); return; }
     const leftOn = !!marginL?.offsetParent;
     const cr = canvas.getBoundingClientRect(), mr = margin.getBoundingClientRect(), sr = sheet.getBoundingClientRect();
-    const z = zRef.current;
+    // `zoom` on the page scales pointer events, but not every browser scales getBoundingClientRect.
+    // Measure which one this is, so a card lands on the passage instead of below it.
+    const zoomBox = canvas.closest(".zoom-box") as HTMLElement | null;
+    const zoomRect = zoomBox?.getBoundingClientRect().height || 0;
+    const z = zoomRect > 0 ? zoomBox!.offsetHeight / zoomRect : 1;
     const ml = leftOn ? marginL!.getBoundingClientRect() : null;
     const all = children.map((c) => {
       let y: number | null = null;
@@ -174,10 +191,22 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
       return { c, y, ys: writing ? [] : ys, side: sideOf(c, leftOn) };
     }).filter((o): o is { c: TreeNode; y: number; ys: { y: number; i: number }[]; side: "left" | "right" } => o.y != null).sort((p, q) => p.y - q.y);
     const tops: Record<string, number> = {};
+    const scrolls: Record<string, number> = {};
     const threads: Thread[] = [];
     let padL = 0;
-    const height = (id: string) => cardRefs.current.get(id)?.offsetHeight ?? 90;
-    const GAP = 12;
+    const viewH = (scrollRef.current?.clientHeight ?? 800) / z;
+    const pane = Math.max(220, Math.round(viewH - 20));
+    /** Content height, not the height we last fitted the card to, so a long card stays in its scroll. */
+    const contentHeight = (id: string) => {
+      const el = cardRefs.current.get(id);
+      if (!el) return 90;
+      const body = el.querySelector(":scope > .bcard-scroll") as HTMLElement | null;
+      if (!body) return el.offsetHeight;
+      const head = el.querySelector(":scope > .bcard-head") as HTMLElement | null;
+      const cs = getComputedStyle(el);
+      const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      return Math.ceil((head?.offsetHeight ?? 0) + body.scrollHeight + pad + 8);
+    };
     // Each margin is laid out on its own: cards stack top to bottom, each at its passage or just below the one before.
     // The source you're reading gets a column of its own beyond its margin, as tall as the window, following you as you scroll.
     const col = all.find((o) => o.c.id === readingBeside && o.c.kind === "source" && !compact);
@@ -197,30 +226,33 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
       const items = all.filter((o) => o.side === side && o !== col);
       // A narrow card hides the left margin; its branches move to the right one, so there's nothing to lay out here.
       if (!items.length || (side === "left" && !ml)) continue;
-      // A card you dragged up or down moves by that much from wherever it would otherwise sit; the ones below make room.
-      const dy = (o: { c: TreeNode }) => o.c.nudge?.dy || 0;
-      const stack = () => { let floor = 0; for (const o of items) { const t = Math.max(0, Math.max(o.y - 6, floor) + dy(o)); tops[o.c.id] = t; floor = Math.max(floor, t + height(o.c.id) + GAP); } };
-      // The branch you're working on sits right beside its passage; the others move out of its way.
-      const fi = focusId ? items.findIndex((o) => o.c.id === focusId) : -1;
-      if (fi < 0) stack();
-      else {
-        const f = items[fi], ft = Math.max(f.y - 6 + dy(f), 0);
-        tops[f.c.id] = ft;
-        let floor = ft + height(f.c.id) + GAP;
-        for (const o of items.slice(fi + 1)) { const t = Math.max(0, Math.max(o.y - 6, floor) + dy(o)); tops[o.c.id] = t; floor = Math.max(floor, t + height(o.c.id) + GAP); }
-        let ceil = ft - GAP, fits = true;
-        for (const o of items.slice(0, fi).reverse()) { const t = Math.min(o.y - 6 + dy(o), ceil - height(o.c.id)); if (t < 0) { fits = false; break; } tops[o.c.id] = t; ceil = t - GAP; }
-        if (!fits) stack();
-      }
-      // Threads leave the page from the edge nearest the card's margin.
+      // Linked cards stay level with the passage that opened them. A card that's taller than the
+      // screen (or than the gap beside that passage) scrolls inside itself instead of pushing the rest down.
+      // Card `top` is relative to the margin; passage positions are relative to the canvas.
+      const originY = ((side === "left" ? ml!.top : mr.top) - cr.top) / z;
+      const packed = packMargin(items.map((o) => ({
+        id: o.c.id,
+        // Pack from the passage. A drag is applied afterwards, from wherever the card
+        // actually landed, so a card that was pushed down still moves by the whole drag.
+        y: Math.max(0, Math.round(o.y - originY - 6)),
+        height: o.c.size?.h ?? contentHeight(o.c.id),
+        anchored: o.c.anchors.length > 0,
+        fixed: !!o.c.size,
+      })), pane);
+      // Threads leave the page from the edge nearest the card's margin and meet the card level with the passage.
       const x1 = (side === "left" ? sr.left - cr.left : sr.right - cr.left) / z;
       const x2 = side === "left" ? (ml!.right - cr.left) / z - 1 : (mr.left - cr.left) / z + 1;
       for (const o of items) {
-        const top = Math.round(tops[o.c.id]);
+        const place = packed[o.c.id];
+        if (!place) continue;
+        const top = place.top + (o.c.nudge?.dy || 0);
         tops[o.c.id] = top;
+        const full = o.c.size?.h ?? contentHeight(o.c.id);
+        if (!o.c.size && place.height < full - 2) scrolls[o.c.id] = place.height;
+        const cardTop = originY + top;
         // A card dragged further from the page takes its thread with it.
         const away = o.c.nudge?.away || 0, cx2 = x2 + (side === "left" ? -away : away);
-        o.ys.forEach(({ y, i }) => threads.push({ key: `${o.c.id}:${i}`, annId: o.c.id, ai: i, kind: kindClass(o.c), x1: Math.round(x1), y1: Math.round(y), x2: Math.round(cx2), y2: Math.round(top + 22) }));
+        o.ys.forEach(({ y, i }) => threads.push({ key: `${o.c.id}:${i}`, annId: o.c.id, ai: i, kind: kindClass(o.c), x1: Math.round(x1), y1: Math.round(y), x2: Math.round(cx2), y2: Math.round(Math.min(Math.max(y, cardTop + 18), cardTop + place.height - 18)) }));
       }
     }
     // Anything pushed out past the left edge (a card dragged far out, a stretched card, the page slid left) can't be
@@ -239,11 +271,38 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     const key = `${pageX}|${pageW}|${z}|${marginW}|${Object.values(tops).join(",")}`;
     if (padL > prevPad && g.key === key && g.from < prevPad && g.pad === prevPad && minLeft <= g.minLeft + 0.5) padL = prevPad;
     if (padL !== prevPad) { g.from = prevPad; g.pad = padL; g.minLeft = minLeft; g.key = key; }
-    const next = { tops, threads, leftOn, padL: Math.ceil(padL), colSide, colH };
+    const next = { tops, threads, leftOn, padL: Math.ceil(padL), colSide, colH, scrolls, pane };
     setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-  }, [children, focusId, sideOf, writing, readingBeside, compact, pageX, pageW, marginW]);
+  }, [children, sideOf, writing, readingBeside, compact, pageX, pageW, marginW]);
   const raf = useRef(0);
   const padGuard = useRef({ from: 0, pad: 0, minLeft: 0, key: "" });
+  const padSeen = useRef(0);
+  // Padding that makes room for a card past the left edge would slide the seed. Once that padding is
+  // actually in the page, scroll by the same amount so the seed stays where it was.
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    const pad = layout.padL || 0;
+    const prev = padSeen.current;
+    padSeen.current = pad;
+    if (!scroller || pad === prev) return;
+    const box = scroller.querySelector(".zoom-box") as HTMLElement | null;
+    const rectH = box?.getBoundingClientRect().height || 0;
+    const z = rectH > 0 ? box!.offsetHeight / rectH : 1;
+    scroller.scrollLeft = Math.max(0, scroller.scrollLeft + (pad - prev) / (z || 1));
+  }, [layout.padL]);
+  // Zoom keeps the page in the middle of the canvas, so space opens evenly above, below, and to either side.
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || compact) return;
+    const center = () => {
+      scroller.scrollLeft = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) / 2);
+      scroller.scrollTop = Math.max(0, (scroller.scrollHeight - scroller.clientHeight) / 2);
+    };
+    center();
+    // The page's width settles a frame later; center again once it has.
+    const id = requestAnimationFrame(center);
+    return () => cancelAnimationFrame(id);
+  }, [zoom, compact]);
   const scheduleLayout = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(compute); }, [compute]);
   useLayoutEffect(() => { compute(); }, [compute, editingId, focusId, writing, compact, branchesOpen, layout.leftOn, zoom, readingBeside, pageW, pageX, originalOn]);
   // Padding changes resize the canvas, which the ResizeObserver below picks up; a second pass settles it.
@@ -317,40 +376,86 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
   };
 
   /* ---------- threads ---------- */
-  const finishThread = (from: Drag["from"], cx: number, cy: number) => {
+  const finishThread = (from: Drag["from"], cx: number, cy: number, snapped: Anchor | null) => {
     const el = document.elementFromPoint(cx, cy) as HTMLElement | null;
-    if (!el || !canvasRef.current?.contains(el)) return;
-    const card = el.closest("[data-branch]") as HTMLElement | null;
+    if (!snapped && (!el || !canvasRef.current?.contains(el))) return;
+    const card = el?.closest("[data-branch]") as HTMLElement | null;
+    const sentence = () => snapped || (sheetRef.current ? sentenceAnchorAt(content, cx, cy, sheetRef.current) : null);
     if (from.anchor) {
       const an = from.anchor;
       if (card) { addAnchor(card.dataset.branch!, an); toast("Linked to that branch"); }
-      else if (el.closest(".margin")) newNote([an], undefined, (el.closest(".margin") as HTMLElement).dataset.side === "left" ? "left" : "right");
-      else if (el.closest(".sheet")) {
-        const t = sentenceAnchorAt(content, cx, cy, sheetRef.current!);
+      else if (el?.closest(".margin")) newNote([an], undefined, (el.closest(".margin") as HTMLElement).dataset.side === "left" ? "left" : "right");
+      else if (el?.closest(".sheet") || snapped) {
+        const t = sentence();
         if (t && !(t.blockId === an.blockId && t.start < an.end && t.end > an.start)) newNote([an, t]);
       }
       clearSel();
     } else if (from.nodeId && from.relink != null) {
       // A link's end dragged onto another sentence moves the link there.
-      const t = el.closest(".sheet") ? sentenceAnchorAt(content, cx, cy, sheetRef.current!) : null;
+      const t = sentence();
       if (t) { replaceAnchor(from.nodeId, from.relink, t); toast("Moved the link"); }
-    } else if (from.nodeId && el.closest(".sheet")) {
-      const t = sentenceAnchorAt(content, cx, cy, sheetRef.current!);
+    } else if (from.nodeId) {
+      const t = sentence();
       if (t) { addAnchor(from.nodeId, t); toast("Linked to the passage"); }
     }
+  };
+  /** The sentence under the cursor, and where on the page the thread should meet it. */
+  const phraseAt = (clientX: number, clientY: number, nodeId?: string) => {
+    const sheet = sheetRef.current;
+    const anchor = sheet ? sentenceAnchorAt(content, clientX, clientY, sheet) : null;
+    if (!anchor || !sheet) return null;
+    const range = rangeForAnchor(sheet, anchor);
+    if (!range) return { anchor, x: clientX, y: clientY };
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    const line = rects.reduce<DOMRect | null>((best, r) => (!best || Math.abs(r.top + r.height / 2 - clientY) < Math.abs(best.top + best.height / 2 - clientY) ? r : best), null);
+    if (!line) return { anchor, x: clientX, y: clientY };
+    const card = nodeId ? canvasRef.current?.querySelector(`[data-branch="${CSS.escape(nodeId)}"]`) : null;
+    const onLeft = card?.getAttribute("data-side") === "left";
+    return { anchor, x: onLeft ? line.left : line.right, y: Math.min(line.bottom - 1, Math.max(line.top + 1, clientY)) };
+  };
+  const glowPhrase = (anchor: Anchor | null) => {
+    const marks = CSS.highlights;
+    if (!marks || typeof Highlight === "undefined") return;
+    if (!anchor || !sheetRef.current) { marks.delete("rd-link"); return; }
+    const range = rangeForAnchor(sheetRef.current, anchor);
+    if (range) marks.set("rd-link", new Highlight(range));
+    else marks.delete("rd-link");
+  };
+  /** Drag a thread. Cards get out of the way so the cursor lands on the words, and the line settles on the sentence. */
+  const trackThread = (from: Drag["from"], x1: number, y1: number) => {
+    canvasRef.current?.classList.add("threading");
+    let snapped: Anchor | null = null;
+    let frame = 0;
+    let last: PointerEvent | null = null;
+    const paint = () => {
+      frame = 0;
+      const ev = last;
+      if (!ev) return;
+      const hit = phraseAt(ev.clientX, ev.clientY, from.nodeId);
+      snapped = hit?.anchor ?? null;
+      glowPhrase(snapped);
+      const p = hit ? toCanvas(hit.x, hit.y) : toCanvas(ev.clientX, ev.clientY);
+      setDrag({ from, x1, y1, x2: p.x, y2: p.y });
+    };
+    const move = (ev: PointerEvent) => { last = ev; if (!frame) frame = requestAnimationFrame(paint); };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      if (frame) cancelAnimationFrame(frame);
+      const hit = phraseAt(ev.clientX, ev.clientY, from.nodeId);
+      canvasRef.current?.classList.remove("threading");
+      glowPhrase(null);
+      setDrag(null);
+      finishThread(from, ev.clientX, ev.clientY, hit?.anchor ?? snapped);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   };
   const startThread = (from: Drag["from"], x1: number, y1: number, e: RPointerEvent) => {
     e.preventDefault(); e.stopPropagation();
     // Pulling a thread from a passage needs somewhere to land: open the margin.
     if (from.anchor && !compact && !branchesOpen) setUI({ branchesOpen: true });
     setDrag({ from, x1, y1, x2: x1, y2: y1 });
-    const move = (ev: PointerEvent) => { const p = toCanvas(ev.clientX, ev.clientY); setDrag((d) => (d ? { ...d, x2: p.x, y2: p.y } : d)); };
-    const up = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
-      setDrag(null); finishThread(from, ev.clientX, ev.clientY);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    trackThread(from, x1, y1);
   };
 
   /** Grab the dot where a thread meets the page: drag it to another sentence to move the link, or click it to unlink. */
@@ -360,16 +465,22 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     e.preventDefault(); e.stopPropagation();
     const x0 = e.clientX, y0 = e.clientY;
     let moved = false;
+    const from = { nodeId: t.annId, relink: t.ai };
     const move = (ev: PointerEvent) => {
       if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
-      moved = true;
-      const p = toCanvas(ev.clientX, ev.clientY);
-      setDrag({ from: { nodeId: t.annId, relink: t.ai }, x1: t.x2, y1: t.y2, x2: p.x, y2: p.y });
+      if (!moved) { moved = true; canvasRef.current?.classList.add("threading"); }
+      const hit = phraseAt(ev.clientX, ev.clientY, t.annId);
+      glowPhrase(hit?.anchor ?? null);
+      const p = hit ? toCanvas(hit.x, hit.y) : toCanvas(ev.clientX, ev.clientY);
+      setDrag({ from, x1: t.x2, y1: t.y2, x2: p.x, y2: p.y });
     };
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      const hit = moved ? phraseAt(ev.clientX, ev.clientY, t.annId) : null;
+      canvasRef.current?.classList.remove("threading");
+      glowPhrase(null);
       setDrag(null);
-      if (moved) finishThread({ nodeId: t.annId, relink: t.ai }, ev.clientX, ev.clientY);
+      if (moved) finishThread(from, ev.clientX, ev.clientY, hit?.anchor ?? null);
       else setLinkMenu({ nodeId: t.annId, ai: t.ai!, x: t.x1, y: t.y1 + 8 });
     };
     window.addEventListener("pointermove", move);
@@ -622,6 +733,8 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     onRead: (url: string) => setUI({ reader: { url, treeId: tree.id, parentId: node.id, anchor: c.anchors[0] || null } }),
     reading: readingBeside === c.id,
     column: layout.colSide && readingBeside === c.id ? layout.colH : undefined,
+    pane: layout.pane,
+    scrollWithin: layout.scrolls[c.id],
     onReadBeside: c.kind === "source" ? () => { setUI({ readingBeside: readingBeside === c.id ? null : c.id }); setFocusId(c.id); } : undefined,
     onHover: (on: boolean) => setHotId(on ? c.id : null),
     onEdit: () => { setEditingId(c.id); setFocusId(c.id); },
@@ -694,7 +807,8 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
               : <div className="card-failed"><p>{node.error || "This page didn't finish opening."}</p><div className="row"><button className="btn btn-secondary btn-sm" onClick={() => loadUrl(node.id)}><RotateCw size={13} />Try again</button>{url && <a className="btn btn-ghost btn-sm" href={url} target="_blank" rel="noopener"><ExternalLink size={13} />Open in browser</a>}</div></div>}
           </div>
         ) : (
-          <div className={`zoom-box${zoom > 1 ? " zoomed-in" : ""}`} style={{ ...(zoom !== 1 ? { zoom } : {}), ...(pageW ? { "--sheet-w": `${pageW}px` } : {}) } as CSSProperties}>
+          <div className="zoom-stage">
+          <div className="zoom-box" style={{ ...(zoom !== 1 ? { zoom } : {}), ...(pageW ? { "--sheet-w": `${pageW}px` } : {}), ...(frameW ? { width: frameW } : {}) } as CSSProperties}>
           <div className={`canvas${dragMarginW != null ? " resizing" : ""}${branchesOpen && !compact ? " with-margin" : ""}${layout.colSide ? ` col-${layout.colSide}` : ""}`} ref={canvasRef}
             style={{ ...(marginW ? { "--margin-user": `${marginW}px` } : {}), ...(layout.padL ? { "--pad-x": `${layout.padL}px` } : {}) } as CSSProperties}
             onMouseDown={(e) => {
@@ -774,6 +888,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
                 <button className="danger" onClick={() => { removeHighlight(hlMenu.id); setHlMenu(null); }}>Remove highlight</button>
               </div>
             )}
+          </div>
           </div>
           </div>
         )}

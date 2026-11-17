@@ -9,6 +9,7 @@ import { useStore } from "../../store/useStore";
 import { Markdown, Segmented, SourceChip } from "../ui";
 import { siteName } from "../../lib/clipboard";
 import { quoteToEssay, explainNode, loadUrl, noteTitle, runAsk, runExplain } from "../../lib/actions";
+import { resizeCard, type Corner } from "../../lib/cardGesture";
 import { clamp, plural } from "../../lib/util";
 
 export const KIND_LABEL: Record<TreeNode["kind"], string> = { source: "Source", note: "Note", definition: "Definition", explanation: "Claude", clipping: "Clipping" };
@@ -39,6 +40,10 @@ interface Props {
   reading?: boolean;
   /** Set when the card stands in its own reading column beyond the margin: its height, to fill the window. */
   column?: number;
+  /** The reading pane, in page units. A margin card never grows taller than this. */
+  pane?: number;
+  /** Set when the card is taller than the room beside its passage: it keeps this height and scrolls inside. */
+  scrollWithin?: number;
   onHover: (on: boolean) => void;
   onEdit: () => void;
   onDone: () => void;
@@ -48,7 +53,7 @@ interface Props {
   onResize: () => void;
 }
 
-export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onReadBeside, reading, column, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
+export function BranchCard({ node: n, track, top, side = "right", inline, editing, locked, focused, hot, childCount, setRef, onOpen, onRead, onReadBeside, reading, column, pane, scrollWithin, onHover, onEdit, onDone, onAsk, onThreadStart, onJump, onResize }: Props) {
   const { updateNode, removeNode, removeAnchor } = useStore.getState();
   const doc = useStore((s) => (n.docId ? s.docs[n.docId] : undefined));
   // A source shows its article when you open it here, or when you've stretched its card to read in.
@@ -80,23 +85,24 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
   const [question, setQuestion] = useState("");
   const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null);
   const size = liveSize || n.size;
-  /** Stretch the card from its outer bottom corner. It keeps the size you give it. */
-  const startResize = (e: RPointerEvent) => {
+  /** Stretch the card from whichever corner you grab. The opposite corner stays where it is. */
+  const startResize = (corner: Corner) => (e: RPointerEvent) => {
     e.preventDefault(); e.stopPropagation();
     const el = elRef.current;
     if (!el) return;
-    const x0 = e.clientX, y0 = e.clientY, w0 = el.offsetWidth, h0 = el.offsetHeight;
-    // The page may be zoomed: pointer distances are on screen, sizes are in page units.
+    const x0 = e.clientX, y0 = e.clientY;
     const z = useStore.getState().ui.readZoom ?? 1;
-    let next = { w: w0, h: h0 };
+    const start = { w: el.offsetWidth, h: el.offsetHeight, away: n.nudge?.away || 0, dy: n.nudge?.dy || 0 };
+    let next = start;
     const move = (ev: PointerEvent) => {
-      const dx = ((ev.clientX - x0) / z) * (side === "left" ? -1 : 1);
-      next = { w: Math.round(clamp(w0 + dx, 160, 900)), h: Math.round(clamp(h0 + (ev.clientY - y0) / z, 64, 1400)) };
-      setLiveSize(next);
+      next = resizeCard(side, corner, (ev.clientX - x0) / z, (ev.clientY - y0) / z, start);
+      setLiveSize({ w: next.w, h: next.h });
+      setLiveNudge({ away: next.away, dy: next.dy });
     };
     const up = () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
-      updateNode(n.id, { size: next }); setLiveSize(null);
+      updateNode(n.id, { size: { w: next.w, h: next.h }, nudge: next.away || next.dy ? { away: next.away, dy: next.dy } : undefined });
+      setLiveSize(null); setLiveNudge(null); onResize();
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -180,6 +186,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
     onOpen();
   };
 
+  const corners: Corner[] = side === "left" ? ["sw", "se", "nw", "ne"] : ["se", "sw", "ne", "nw"];
   const first = n.anchors[0];
   const unattached = n.anchors.length === 0;
   const meta = doc ? [doc.site || doc.format.toUpperCase(), doc.pages > 1 ? plural(doc.pages, "page") : ""].filter(Boolean).join(" · ") : n.url ? n.url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 40) : "";
@@ -191,8 +198,8 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
       data-testid="branch-card"
       data-kind={n.kind}
       data-side={inline ? undefined : side}
-      className={`bcard bcard-${n.kind} kind-${kindClass(n)} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${column ? " reading-col" : ""}${editable ? " editable" : ""}${liveNudge ? " moving" : ""}`}
-      style={!inline ? { ...(top != null ? { top } : {}), ...(column ? { height: column } : size ? { width: size.w, height: size.h } : {}),
+      className={`bcard bcard-${n.kind} kind-${kindClass(n)} side-${side}${size && !inline ? " sized" : ""}${focused ? " focused" : ""}${hot ? " hot" : ""}${inline ? " inline" : ""}${unattached ? " unattached" : ""}${showArticle ? " reading" : ""}${column ? " reading-col" : ""}${!inline && !column && !size ? " fit" : ""}${editable ? " editable" : ""}${liveNudge ? " moving" : ""}${liveSize ? " sizing" : ""}`}
+      style={!inline ? { ...(top != null ? { top } : {}), ...(column ? { height: column } : size ? { width: size.w, height: size.h } : pane ? { maxHeight: scrollWithin ?? pane, ...(scrollWithin ? { height: scrollWithin } : {}) } : {}),
         // While dragging, the card follows the pointer; once dropped, the layout places it (its `dy` is part of where it sits).
         ...(!column && (nudge?.away || liveNudge) ? { transform: `translate(${(side === "left" ? -1 : 1) * (nudge?.away || 0)}px, ${liveNudge ? liveNudge.dy - (n.nudge?.dy || 0) : 0}px)` } : {}) } : undefined}
       onMouseEnter={() => onHover(true)}
@@ -212,6 +219,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
           : <button className={`track-chip t-${track}`} data-testid="track-chip" title={`Switch to ${TRACK_LABEL[otherTrack(track)]}`} aria-label={`${TRACK_LABEL[track]}. Switch to ${TRACK_LABEL[otherTrack(track)]}`}
               onClick={() => updateNode(n.id, { track: otherTrack(track) })}>{TRACK_LABEL[track]}</button>)}
       </div>
+      <div className="bcard-scroll">
 
       {n.kind === "source" && (
         <>
@@ -297,6 +305,7 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
           ))}
         </div>
       )}
+      </div>
 
       {!editing && (
         <div className="bcard-actions">
@@ -312,7 +321,9 @@ export function BranchCard({ node: n, track, top, side = "right", inline, editin
           </button>}
         </div>
       )}
-      {!inline && !locked && <span className="bcard-resize" role="presentation" title="Drag to resize" onPointerDown={startResize} onClick={(e) => e.stopPropagation()} />}
+      {!inline && !locked && corners.map((corner) => (
+        <span key={corner} className={`bcard-resize ${corner}`} data-corner={corner} role="presentation" title="Drag to resize" onPointerDown={startResize(corner)} onClick={(e) => e.stopPropagation()} />
+      ))}
     </div>
   );
 }

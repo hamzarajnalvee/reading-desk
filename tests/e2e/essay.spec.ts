@@ -25,7 +25,7 @@ test.describe("Essay workspace", () => {
     // It sits beside the seed on screen, and stays there while you write on the seed.
     const onScreen = async () => { const b = await branch.boundingBox(); return !!b && b.y > 0 && b.y < 900; };
     await expect.poll(onScreen).toBe(true);
-    await card(page, "n-telos").locator(".sheet [data-block]").first().click();
+    await card(page, "n-telos").locator(".sheet [data-block]").first().click({ position: { x: 8, y: 10 } });
     await expect(card(page, "n-telos").getByRole("textbox", { name: "Your writing" })).toBeVisible();
     await expect.poll(onScreen).toBe(true);
     await page.keyboard.press("Escape");

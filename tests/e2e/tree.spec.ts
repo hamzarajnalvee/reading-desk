@@ -357,8 +357,10 @@ test.describe("Reading around the source", () => {
     await editor.press("Escape");
     const note = left.locator('[data-testid="branch-card"]', { hasText: "Starts on the left." });
     await expect(note).toBeVisible();
+    const handle = note.locator(".bcard-resize.sw");
+    await handle.scrollIntoViewIfNeeded();
     const before = (await note.boundingBox())!;
-    const corner = (await note.locator(".bcard-resize").boundingBox())!;
+    const corner = (await handle.boundingBox())!;
     await note.hover();
     await page.mouse.move(corner.x + 4, corner.y + 4);
     await page.mouse.down();

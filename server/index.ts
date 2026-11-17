@@ -92,13 +92,22 @@ app.get("/api/define", async (req, res) => {
         }
       }
     }
-    const w = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term.replace(/\s+/g, "_"))}?redirect=true`, { headers, signal: AbortSignal.timeout(6000) });
-    if (w.ok) {
+    // Exact title first; a phrase like "human productive capacity" has no article of its own, so fall back to Wikipedia's best search match.
+    const summary = async (title: string) => {
+      const w = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/\s+/g, "_"))}?redirect=true`, { headers, signal: AbortSignal.timeout(6000) });
+      if (!w.ok) return null;
       const j = (await w.json()) as { type?: string; title: string; extract?: string; content_urls?: { desktop?: { page?: string } } };
-      if (j.extract && j.type !== "disambiguation") {
-        res.json({ term: j.title, text: j.extract, source: { site: "Wikipedia", title: j.title, url: j.content_urls?.desktop?.page } });
-        return;
-      }
+      return j.extract && j.type !== "disambiguation" ? j : null;
+    };
+    let j = await summary(term);
+    if (!j) {
+      const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch=${encodeURIComponent(term)}`, { headers, signal: AbortSignal.timeout(6000) });
+      const top = r.ok ? ((await r.json()) as { query?: { search?: { title: string }[] } }).query?.search?.[0]?.title : undefined;
+      if (top) j = await summary(top);
+    }
+    if (j) {
+      res.json({ term: j.title, text: j.extract, source: { site: "Wikipedia", title: j.title, url: j.content_urls?.desktop?.page } });
+      return;
     }
     res.status(404).json({ error: "No definition found" });
   } catch (e) { res.status(502).json({ error: (e as Error).message }); }

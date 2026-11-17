@@ -65,6 +65,29 @@ export function sentenceAnchorAt(doc: Readable, x: number, y: number, root?: Ele
   return { docId: doc.id, blockId: block.id, start: s, end: e, quote: block.text.slice(s, e), page: block.page };
 }
 
+/** A DOM range for an anchor, so a thread can sit on the exact sentence under the cursor. */
+export function rangeForAnchor(root: ParentNode, anchor: Anchor): Range | null {
+  const be = root.querySelector(`[data-block="${anchor.blockId}"]`);
+  if (!be) return null;
+  const walker = document.createTreeWalker(be, NodeFilter.SHOW_TEXT);
+  let seen = 0;
+  let startNode: Text | null = null, startOff = 0, endNode: Text | null = null, endOff = 0;
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const len = n.textContent?.length ?? 0;
+    if (!startNode && seen + len > anchor.start) { startNode = n as Text; startOff = anchor.start - seen; }
+    if (startNode && seen + len >= anchor.end) { endNode = n as Text; endOff = anchor.end - seen; break; }
+    seen += len;
+  }
+  if (!startNode || !endNode) return null;
+  const range = document.createRange();
+  try {
+    range.setStart(startNode, Math.max(0, Math.min(startOff, startNode.length)));
+    range.setEnd(endNode, Math.max(0, Math.min(endOff, endNode.length)));
+  } catch { return null; }
+  return range;
+}
+
 /** First rendered mark for an annotation (marks carry space-separated ids in data-ann). */
 export function markFor(root: ParentNode, annId: string, blockId?: string): HTMLElement | null {
   const sel = blockId ? `[data-block="${blockId}"] [data-ann~="${annId}"]` : `[data-ann~="${annId}"]`;

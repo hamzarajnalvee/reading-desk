@@ -104,6 +104,7 @@ test.describe("Stretching the margin", () => {
     const margin = card(page, "n-stripe").locator('[data-testid="margin"][data-side="right"]');
     const before = (await margin.boundingBox())!.width;
     const grip = margin.getByRole("separator", { name: "Stretch the margin" });
+    await grip.scrollIntoViewIfNeeded();
     await margin.hover();
     const g = (await grip.boundingBox())!;
     await page.mouse.move(g.x + g.width / 2, g.y + 200);

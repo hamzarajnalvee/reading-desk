@@ -45,12 +45,13 @@
 .spine-n { font-family: var(--font-mono); font-size: 11px; }
 .spine-title { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-serif); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 70vh; }
 .card-close { position: absolute; top: 10px; right: 12px; z-index: 6; background: var(--surface-raised); border: 1px solid var(--hairline); }
-.card-scroll { flex: 1; min-width: 0; overflow-y: auto; overflow-x: auto; position: relative; container-type: inline-size; container-name: card; }
+.card-scroll { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: auto; position: relative; display: flex; flex-direction: column; container-type: inline-size; container-name: card; }
 .card-loading, .card-failed { max-width: 640px; margin: 48px auto; padding: 0 24px; display: grid; gap: 14px; }
 .card-failed .row { display: flex; gap: 8px; }
 
 /* Reading surface */
-.canvas { position: relative; display: grid; grid-template-columns: minmax(0, var(--sheet-w)); justify-content: safe center; column-gap: 44px; padding: 28px 28px 140px; padding-left: calc(28px + var(--pad-x, 0px)); min-height: 100%; }
+/* The seed keeps its measure. A wider margin card grows past its column and the page scrolls; it does not squeeze the seed. */
+.canvas { position: relative; display: grid; grid-template-columns: var(--sheet-w); justify-content: safe center; column-gap: 44px; padding: 28px 28px 140px; padding-left: calc(28px + var(--pad-x, 0px)); min-width: max-content; }
 .sheet-wrap { min-width: 0; }
 .sheet { background: var(--paper); box-shadow: var(--shadow-sheet); border-radius: 4px; padding: 48px 56px 88px; font-family: var(--font-serif); font-size: var(--read-size); line-height: var(--read-leading); color: var(--ink); }
 .card-head { margin-bottom: 26px; display: grid; gap: 10px; font-family: var(--font-ui); }
@@ -99,7 +100,7 @@
 
 /* The margin of branch cards is shown from the card's Branches button, so by default the page sits alone in the centre. */
 /* With branches showing, the page stays in the centre with a margin on each side. */
-.canvas.with-margin { grid-template-columns: var(--margin-user, var(--margin-w)) minmax(0, var(--sheet-w)) var(--margin-user, var(--margin-w)); }
+.canvas.with-margin { grid-template-columns: var(--margin-user, var(--margin-w)) var(--sheet-w) var(--margin-user, var(--margin-w)); }
 .canvas:not(.with-margin) .margin { display: none; }
 
 /* Card tools: Contents and Branches, quiet icons in the card's top-right corner. */
@@ -142,6 +143,10 @@
 
 /* Branch cards */
 .bcard { position: absolute; left: 0; right: 0; z-index: 2; background: var(--surface-raised); border: 1px solid var(--hairline); border-radius: 12px; padding: 11px 13px 12px; font-size: 13px; line-height: 1.45; cursor: pointer; transition: top var(--t-med) var(--spring), box-shadow var(--t-fast), border-color var(--t-fast), transform var(--t-fast); }
+/* A margin card stays within the screen. What doesn't fit scrolls inside the card, so the page doesn't. */
+.bcard.fit { display: flex; flex-direction: column; overflow: visible; }
+.bcard.fit > .bcard-head, .bcard.fit > .bcard-actions, .bcard.fit > .bcard-resize { flex: 0 0 auto; }
+.bcard.fit > .bcard-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .bcard:hover { border-color: var(--border); }
 .bcard.inline { position: static; }
 .bcard-note { background: var(--a-note); border-color: transparent; }
@@ -151,6 +156,7 @@
 .bcard-source.hot, .bcard-source.focused { box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1.5px var(--accent-line), var(--shadow-sheet); }
 .bcard.unattached { border-style: dashed; }
 .card-handle { left: -7px; top: 15px; opacity: 0; transition: opacity var(--t-fast); }
+.card-handle::after { content: ""; position: absolute; inset: -8px; }
 .bcard:hover .card-handle, .card-handle.show { opacity: 1; }
 .bcard-head { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-bottom: 6px; }
 .bcard-head .count { color: var(--accent); }
@@ -260,17 +266,13 @@
 
 /* Cards adapt to their own width */
 /* Two margins on wide cards; a little narrower before they give way to one. */
-@container card (max-width: 1320px) { .canvas.with-margin { grid-template-columns: var(--margin-user, 230px) minmax(0, var(--sheet-w)) var(--margin-user, 230px); column-gap: 32px; } }
+@container card (max-width: 1320px) { .canvas.with-margin { grid-template-columns: var(--margin-user, 230px) var(--sheet-w) var(--margin-user, 230px); column-gap: 32px; } }
 @container card (max-width: 980px) {
   .canvas { column-gap: 32px; padding: 24px 20px 120px; padding-left: calc(20px + var(--pad-x, 0px)); }
-  .canvas.with-margin { grid-template-columns: minmax(0, 1fr) var(--margin-user, 250px); }
-  /* Too narrow for two margins: every branch sits on the right. */
-  .canvas.with-margin .margin-left { display: none; }
   .sheet { padding: 40px 44px 72px; }
 }
 @container card (max-width: 760px) {
   .canvas { column-gap: 20px; padding: 16px 14px 120px; padding-left: calc(14px + var(--pad-x, 0px)); }
-  .canvas.with-margin { grid-template-columns: minmax(0, 1fr) var(--margin-user, 210px); }
   .sheet { padding: 30px 26px 60px; font-size: 17px; }
   .card-head h1 { font-size: 25px; }
 }
@@ -316,7 +318,7 @@ body:has([aria-modal="true"]) .coach { display: none; }
 @media (pointer: coarse) { .margin-grip { display: none; } }
 
 /* Chapter bar: where you are in the source, how far through, and a summary of this part. Stays at the top as you read. */
-.chapter-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 140px 0 16px; background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border-bottom: 1px solid var(--hairline); }
+.chapter-bar { position: sticky; top: 0; z-index: 5; flex: none; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 140px 0 16px; background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border-bottom: 1px solid var(--hairline); }
 .chapter-name { font-size: 14.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .chapter-bar .icon-btn:disabled { opacity: 0.3; cursor: default; }
 .chapter-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); transform-origin: left; transition: transform var(--t-fast); }
@@ -376,10 +378,12 @@ body:has([aria-modal="true"]) .coach { display: none; }
 .bcard.side-right.sized { right: auto; }
 .bcard.side-left.sized { left: auto; right: 0; }
 .bcard.side-left .card-handle { left: auto; right: -7px; }
-.bcard-resize { position: absolute; bottom: 0; width: 14px; height: 14px; opacity: 0; transition: opacity var(--t-fast); touch-action: none; }
-.bcard.side-right .bcard-resize { right: 0; cursor: nwse-resize; border-right: 2px solid var(--accent-line); border-bottom: 2px solid var(--accent-line); border-bottom-right-radius: 12px; }
-.bcard.side-left .bcard-resize { left: 0; cursor: nesw-resize; border-left: 2px solid var(--accent-line); border-bottom: 2px solid var(--accent-line); border-bottom-left-radius: 12px; }
-.bcard:hover .bcard-resize, .bcard.focused .bcard-resize { opacity: 1; }
+.bcard-resize { position: absolute; z-index: 4; width: 16px; height: 16px; opacity: 0; transition: opacity var(--t-fast); touch-action: none; }
+.bcard-resize.se { right: 0; bottom: 0; cursor: nwse-resize; border-right: 2px solid var(--accent-line); border-bottom: 2px solid var(--accent-line); border-bottom-right-radius: 12px; }
+.bcard-resize.sw { left: 0; bottom: 0; cursor: nesw-resize; border-left: 2px solid var(--accent-line); border-bottom: 2px solid var(--accent-line); border-bottom-left-radius: 12px; }
+.bcard-resize.ne { right: 0; top: 0; cursor: nesw-resize; border-right: 2px solid var(--accent-line); border-top: 2px solid var(--accent-line); border-top-right-radius: 12px; }
+.bcard-resize.nw { left: 0; top: 0; cursor: nwse-resize; border-left: 2px solid var(--accent-line); border-top: 2px solid var(--accent-line); border-top-left-radius: 12px; }
+.bcard:hover .bcard-resize, .bcard.focused .bcard-resize, .bcard.sizing .bcard-resize { opacity: 1; }
 @media (pointer: coarse) { .bcard-resize { display: none; } }
 
 /* Asking Claude in the margin */
@@ -447,12 +451,12 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .tree-body.with-reader > .zoom-ctl { right: min(600px, calc(100% - 304px)); }
 @media (max-width: 760px) { .tree-body.with-reader > .stack { margin-right: 0; } }
 
-/* The page and its margins zoom as one. The box is the "card" container, so the layout responds to the zoomed width:
-   zoomed out there is room for both margins; zoomed in the page keeps its full width and you scroll sideways. */
-.zoom-box { container-type: inline-size; container-name: card; min-height: 100%; display: flex; flex-direction: column; }
+/* The page sits on a canvas. Zoom scales it from the middle, and the free space is shared
+   on every side — above, below, left and right — the way a diagram canvas does. */
+.zoom-stage { flex: 1 0 auto; display: flex; min-width: 100%; box-sizing: border-box; padding: 48px; }
+.zoom-box { container-type: inline-size; container-name: card; margin: auto; flex: none; display: flex; flex-direction: column; }
+@media (max-width: 760px) { .zoom-stage { padding: 0; } }
 .zoom-box > .canvas { flex: 1; }
-.zoom-box.zoomed-in { min-width: calc(var(--sheet-w) + 56px); }
-.zoom-box.zoomed-in:has(.canvas.with-margin) { min-width: calc(var(--sheet-w) + 2 * var(--margin-user, var(--margin-w)) + 144px); }
 
 /* A source read in place: the margin card widens to a comfortable reading measure and scrolls within itself. */
 .bcard.reading:not(.sized):not(.inline) { width: min(520px, max(100%, calc((100cqw - var(--sheet-w)) / 2 - 56px))); z-index: 4; box-shadow: var(--shadow-pop); cursor: default; }
@@ -477,15 +481,19 @@ a.cite, .md a.cite { color: var(--link); text-decoration: underline; text-decora
 .bcard.reading-col .bcard-resize { display: none; }
 @media (prefers-reduced-motion: reduce) { .bcard.reading-col { transition: none; } }
 /* With a reading column open the page never shrinks below a readable width; past that, scroll sideways (or zoom out). */
-.canvas.col-left, .canvas.col-right { grid-template-columns: minmax(min(480px, var(--sheet-w)), var(--sheet-w)); }
-.canvas.with-margin.col-left, .canvas.with-margin.col-right { grid-template-columns: var(--margin-user, 230px) minmax(min(480px, var(--sheet-w)), var(--sheet-w)) var(--margin-user, 230px); }
+.canvas.col-left, .canvas.col-right { grid-template-columns: var(--sheet-w); }
+.canvas.with-margin.col-left, .canvas.with-margin.col-right { grid-template-columns: var(--margin-user, 230px) var(--sheet-w) var(--margin-user, 230px); }
 .zoom-box:has(.canvas.col-left), .zoom-box:has(.canvas.col-right) { min-width: calc(480px + var(--read-col, 520px) + 24px + 56px); }
 .zoom-box:has(.canvas.with-margin.col-left), .zoom-box:has(.canvas.with-margin.col-right) { min-width: calc(480px + 2 * var(--margin-user, 230px) + 64px + var(--read-col, 520px) + 24px + 56px); }
 
 /* Moving and sizing margin cards: drag the top strip to move, the outer corner to resize. */
 .bcard-head.movable { cursor: grab; touch-action: none; }
-.bcard.moving { transition: none; z-index: 8; box-shadow: var(--shadow-pop); }
+.bcard.moving, .bcard.sizing { transition: none; z-index: 8; box-shadow: var(--shadow-pop); }
 .bcard.moving .bcard-head { cursor: grabbing; }
+.canvas.threading .bcard, .canvas.threading .margin { pointer-events: none; }
+.canvas.threading .sheet, .canvas.threading .sheet * { pointer-events: auto; }
+.canvas.threading { cursor: crosshair; }
+::highlight(rd-link) { background-color: rgba(108, 193, 162, 0.34); text-decoration: underline; text-underline-offset: 3px; }
 .bcard-resize { width: 18px; height: 18px; }
 .bcard:hover .bcard-resize, .bcard.focused .bcard-resize { opacity: 0.8; }
 .bcard-resize:hover { opacity: 1 !important; }
