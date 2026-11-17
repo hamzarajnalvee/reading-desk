@@ -130,6 +130,25 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
     ro.observe(canvas);
     return () => ro.disconnect();
   }, [zoom, layout.padL, marginW, branchesOpen]);
+  // The room on screen for the page and its margins, in page units. It comes from the scroller, not the
+  // canvas, so the page can shrink to fit the window without the canvas measuring itself. Zoomed in, the
+  // page keeps its full width and you scroll sideways instead.
+  const [viewW, setViewW] = useState(0);
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || compact) return;
+    const apply = () => {
+      const stage = scroller.querySelector(".zoom-stage") as HTMLElement | null;
+      const cs = stage ? getComputedStyle(stage) : null;
+      const pad = cs ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 0;
+      const w = Math.floor((scroller.clientWidth - pad) / Math.min(zoom, 1));
+      setViewW((prev) => (prev === w ? prev : w));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(scroller);
+    return () => ro.disconnect();
+  }, [zoom, compact]);
   const sheetWidth = useStore((s) => (compact ? undefined : s.ui.sheetWidth));
   const sheetShift = useStore((s) => (compact ? 0 : s.ui.sheetShift ?? 0));
   const [livePage, setLivePage] = useState<{ w?: number; x: number } | null>(null);
@@ -810,7 +829,7 @@ export function ReadingCard({ tree, node, index, active, compact, onActivate, on
           <div className="zoom-stage">
           <div className="zoom-box" style={{ ...(zoom !== 1 ? { zoom } : {}), ...(pageW ? { "--sheet-w": `${pageW}px` } : {}), ...(frameW ? { width: frameW } : {}) } as CSSProperties}>
           <div className={`canvas${dragMarginW != null ? " resizing" : ""}${branchesOpen && !compact ? " with-margin" : ""}${layout.colSide ? ` col-${layout.colSide}` : ""}`} ref={canvasRef}
-            style={{ ...(marginW ? { "--margin-user": `${marginW}px` } : {}), ...(layout.padL ? { "--pad-x": `${layout.padL}px` } : {}) } as CSSProperties}
+            style={{ ...(marginW ? { "--margin-user": `${marginW}px` } : {}), ...(layout.padL ? { "--pad-x": `${layout.padL}px` } : {}), ...(viewW && !compact ? { width: viewW } : {}) } as CSSProperties}
             onMouseDown={(e) => {
               const t = e.target as HTMLElement;
               if (t.closest(".sheet") && !t.closest("mark")) setSel(null);

@@ -107,10 +107,12 @@ test.describe("Stretching the margin", () => {
     await grip.scrollIntoViewIfNeeded();
     await margin.hover();
     const g = (await grip.boundingBox())!;
-    await page.mouse.move(g.x + g.width / 2, g.y + 200);
+    // The grip runs the page's full height; grab it on screen, below the header.
+    const y = Math.max(g.y, 0) + 200;
+    await page.mouse.move(g.x + g.width / 2, y);
     await page.mouse.down();
-    await page.mouse.move(g.x - 60, g.y + 200, { steps: 5 });
-    await page.mouse.move(g.x - 120, g.y + 200, { steps: 5 });
+    await page.mouse.move(g.x - 60, y, { steps: 5 });
+    await page.mouse.move(g.x - 120, y, { steps: 5 });
     await page.mouse.up();
     await expect.poll(async () => (await margin.boundingBox())!.width).toBeGreaterThan(before + 80);
     const wide = (await margin.boundingBox())!.width;
